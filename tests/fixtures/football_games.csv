@@ -1,0 +1,136 @@
+id,season,week,season_type,home_team,home_score,away_team,away_score,neutral_site
+1,2023,1,regular,Carlow,50,Oakhurst,8,false
+2,2023,1,regular,Hartwell,55,Alder State,15,false
+3,2023,1,regular,Ironwood,43,Larkspur,20,false
+4,2023,1,regular,Northgate,20,Glenrock,39,false
+5,2023,1,regular,Dunmore,9,Fairmont,18,false
+6,2023,1,regular,Kingsley,47,Redfern,30,false
+7,2023,1,regular,Juniper,27,Ashford,41,false
+8,2023,1,regular,Eastvale,34,Millbrook,15,false
+9,2023,2,regular,Fairmont,42,Oakhurst,5,false
+10,2023,2,regular,Redfern,50,Dogwood A&M,27,false
+11,2023,2,regular,Hartwell,46,Eastvale,31,false
+12,2023,2,regular,Dunmore,19,Glenrock,38,false
+13,2023,2,regular,Northgate,29,Millbrook,40,false
+14,2023,2,regular,Juniper,11,Kingsley,15,false
+15,2023,2,regular,Alder State,21,Bexley,17,false
+16,2023,3,regular,Eastvale,40,Birch College,14,false
+17,2023,3,regular,Redfern,51,Oakhurst,19,false
+18,2023,3,regular,Kingsley,16,Carlow,20,false
+19,2023,3,regular,Glenrock,20,Fairmont,14,false
+20,2023,3,regular,Dunmore,22,Ironwood,38,true
+21,2023,3,regular,Larkspur,42,Juniper,30,false
+22,2023,4,regular,Bexley,89,Cedar Tech,27,false
+23,2023,4,regular,Glenrock,53,Alder State,15,false
+24,2023,4,regular,Juniper,15,Hartwell,19,false
+25,2023,4,regular,Kingsley,13,Ashford,29,false
+26,2023,4,regular,Fairmont,36,Northgate,14,false
+27,2023,4,regular,Redfern,32,Eastvale,35,true
+28,2023,5,regular,Oakhurst,32,Northgate,37,false
+29,2023,5,regular,Dogwood A&M,15,Dunmore,36,false
+30,2023,5,regular,Glenrock,48,Redfern,23,false
+31,2023,5,regular,Fairmont,32,Kingsley,24,false
+32,2023,5,regular,Larkspur,24,Millbrook,35,false
+33,2023,5,regular,Ashford,39,Carlow,12,false
+34,2023,5,regular,Hartwell,18,Ironwood,15,false
+35,2023,5,regular,Juniper,14,Birch College,24,false
+36,2023,6,regular,Bexley,35,Carlow,22,false
+37,2023,6,regular,Juniper,10,Dunmore,7,false
+38,2023,6,regular,Hartwell,42,Kingsley,21,false
+39,2023,6,regular,Larkspur,18,Eastvale,22,false
+40,2023,7,regular,Ashford,23,Bexley,15,false
+41,2023,7,regular,Eastvale,34,Juniper,15,false
+42,2023,8,regular,Millbrook,12,Ironwood,8,false
+43,2023,8,regular,Carlow,26,Hartwell,32,false
+44,2023,8,regular,Redfern,17,Fairmont,6,false
+45,2023,8,regular,Kingsley,19,Larkspur,37,false
+46,2023,8,regular,Northgate,16,Ashford,56,true
+47,2023,8,regular,Oakhurst,31,Eastvale,20,true
+48,2023,9,regular,Ironwood,45,Bexley,32,false
+49,2023,9,regular,Dunmore,30,Eastvale,53,false
+50,2023,9,regular,Redfern,61,Northgate,22,false
+51,2023,10,regular,Bexley,31,Northgate,11,false
+52,2023,10,regular,Glenrock,21,Hartwell,13,false
+53,2023,11,regular,Ironwood,39,Eastvale,19,false
+54,2023,11,regular,Northgate,21,Carlow,50,true
+55,2023,11,regular,Ashford,39,Redfern,8,false
+56,2023,11,regular,Glenrock,13,Bexley,14,false
+57,2023,12,regular,Glenrock,24,Ironwood,17,false
+58,2023,12,regular,Dunmore,25,Redfern,18,false
+59,2023,12,regular,Eastvale,6,Fairmont,12,true
+60,2023,13,regular,Kingsley,8,Eastvale,39,false
+61,2023,13,regular,Dunmore,29,Northgate,6,false
+62,2023,13,regular,Ashford,23,Glenrock,27,false
+63,2023,13,regular,Juniper,14,Carlow,25,false
+64,2023,14,regular,Kingsley,26,Millbrook,22,true
+65,2023,14,regular,Carlow,16,Ironwood,40,false
+66,2023,15,regular,Carlow,27,Glenrock,24,true
+67,2024,1,regular,Kingsley,83,Alder State,23,false
+68,2024,1,regular,Hartwell,63,Alder State,23,false
+69,2024,1,regular,Bexley,21,Ashford,33,false
+70,2024,1,regular,Ironwood,42,Dunmore,28,false
+71,2024,1,regular,Northgate,28,Juniper,49,false
+72,2024,1,regular,Millbrook,23,Carlow,16,false
+73,2024,2,regular,Bexley,46,Cedar Tech,17,false
+74,2024,2,regular,Millbrook,65,Dogwood A&M,7,false
+75,2024,2,regular,Fairmont,33,Oakhurst,42,false
+76,2024,2,regular,Kingsley,56,Glenrock,25,false
+77,2024,2,regular,Juniper,9,Ironwood,33,false
+78,2024,2,regular,Ashford,86,Northgate,24,false
+79,2024,2,regular,Eastvale,10,Alder State,24,false
+80,2024,2,regular,Carlow,28,Dunmore,21,false
+81,2024,3,regular,Glenrock,50,Redfern,14,false
+82,2024,3,regular,Carlow,52,Cedar Tech,13,false
+83,2024,3,regular,Fairmont,54,Juniper,32,false
+84,2024,3,regular,Northgate,12,Kingsley,60,false
+85,2024,3,regular,Ironwood,19,Oakhurst,39,false
+86,2024,3,regular,Dunmore,38,Bexley,16,false
+87,2024,3,regular,Ashford,52,Redfern,3,false
+88,2024,3,regular,Millbrook,0,Dogwood A&M,0,false
+89,2024,4,regular,Larkspur,68,Dogwood A&M,30,false
+90,2024,4,regular,Redfern,19,Carlow,46,false
+91,2024,4,regular,Juniper,30,Dunmore,61,false
+92,2024,4,regular,Millbrook,27,Eastvale,17,false
+93,2024,4,regular,Glenrock,24,Oakhurst,49,false
+94,2024,4,regular,Bexley,14,Fairmont,7,false
+95,2024,4,regular,Northgate,7,Dogwood A&M,19,false
+96,2024,4,regular,Hartwell,24,Ironwood,23,true
+97,2024,5,regular,Birch College,12,Bexley,22,false
+98,2024,5,regular,Dunmore,57,Dogwood A&M,23,false
+99,2024,5,regular,Fairmont,22,Eastvale,17,false
+100,2024,5,regular,Ashford,74,Ironwood,29,false
+101,2024,5,regular,Larkspur,28,Carlow,25,false
+102,2024,5,regular,Millbrook,53,Juniper,32,false
+103,2024,5,regular,Kingsley,45,Hartwell,33,false
+104,2024,5,regular,Glenrock,91,Northgate,3,false
+105,2024,6,regular,Millbrook,21,Ashford,44,false
+106,2024,6,regular,Larkspur,16,Oakhurst,33,false
+107,2024,6,regular,Birch College,31,Juniper,10,false
+108,2024,6,regular,Dunmore,24,Carlow,14,false
+109,2024,7,regular,Eastvale,25,Glenrock,4,false
+110,2024,7,regular,Carlow,14,Oakhurst,17,false
+111,2024,7,regular,Millbrook,50,Bexley,22,false
+112,2024,7,regular,Fairmont,0,Ironwood,0,false
+113,2024,8,regular,Ironwood,36,Bexley,14,false
+114,2024,8,regular,Hartwell,11,Larkspur,18,true
+115,2024,8,regular,Ashford,50,Dunmore,18,false
+116,2024,8,regular,Glenrock,20,Juniper,16,false
+117,2024,8,regular,Kingsley,19,Millbrook,17,false
+118,2024,9,regular,Eastvale,33,Dunmore,25,false
+119,2024,9,regular,Kingsley,20,Cedar Tech,30,true
+120,2024,10,regular,Millbrook,44,Larkspur,27,false
+121,2024,11,regular,Northgate,13,Dunmore,36,false
+122,2024,11,regular,Kingsley,42,Oakhurst,34,false
+123,2024,11,regular,Fairmont,0,Carlow,22,false
+124,2024,11,regular,Alder State,27,Hartwell,24,false
+125,2024,12,regular,Bexley,16,Oakhurst,29,false
+126,2024,12,regular,Glenrock,20,Larkspur,28,false
+127,2024,12,regular,Kingsley,35,Ashford,31,false
+128,2024,13,regular,Oakhurst,49,Juniper,20,false
+129,2024,13,regular,Ironwood,26,Carlow,40,false
+130,2024,13,regular,Northgate,17,Millbrook,40,false
+131,2024,13,regular,Eastvale,36,Bexley,21,false
+132,2024,14,regular,Larkspur,61,Northgate,16,false
+133,2024,14,regular,Carlow,29,Ashford,53,false
+134,2024,15,regular,Ashford,38,Hartwell,20,true
+135,2024,16,postseason,Hartwell,30,Bexley,27,true

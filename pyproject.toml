@@ -6,13 +6,30 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "requests",
+    "cvxpy==1.8.1",
+    "numpy==2.4.2",
+    "pandas==2.3.3",
+    "networkx==3.6.1",
+    "scipy",  # version pinned in [tool.uv] constraint-dependencies
+    "clarabel==0.11.1",
+    "osqp==1.1.1",
+    "scs==3.2.11",
 ]
 
 [dependency-groups]
 dev = [
     "pytest",
+    "pyyaml",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.uv]
+# Keep the numerical stack identical to cfb-rankings @ 8ab8201 (uv.lock there)
+# so the parity goldens stay reproducible.
+constraint-dependencies = [
+    "scipy==1.17.0",
+    "highspy==1.13.1",
+]
