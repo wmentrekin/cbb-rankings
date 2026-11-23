@@ -44,8 +44,8 @@ branching:
   branch_name: "claude/sleepy-tesla-rnjsvt"
 
 summary:
-  current_focus: "Planning: plan critique by reviewer, then the pre-execution checkpoint"
-  last_completed: "Discovery complete; owner decisions recorded; requirements.yaml and plan.yaml drafted"
+  current_focus: "Pre-execution checkpoint: waiting for the owner"
+  last_completed: "Plan revised once after reviewer critique"
   current_blocker: ""
 
 artifacts:
@@ -126,11 +126,11 @@ agents:
     requested_model_tier: "balanced"
     requested_reasoning: "medium"
     requested_provider_model: "sonnet"
-    actual_model: ""
-    actual_reasoning: ""
+    actual_model: "claude-sonnet-5-5"
+    actual_reasoning: "not independently controllable"
     routing_enforced: true
     escalation_count: 0
-    status: "running"
+    status: "done"
     stage: "planning"
     task: "critique requirements.yaml and plan.yaml against the code"
     last_update: "2026-11-23"
@@ -138,7 +138,7 @@ agents:
 
 loops:
   planning_review:
-    count: 0
+    count: 1
     max: 2
   execution_verification:
     count: 0
@@ -173,6 +173,6 @@ model_routing:
     - "balanced tier resolved to claude-sonnet-5-5 (the map lists Sonnet 5)"
   unresolved_limitations: []
 
-next_action: "Integrate reviewer findings into plan.yaml, then stop at the pre-execution checkpoint"
+next_action: "Owner chooses proceed, revise plan, narrow scope or stop; gate G0 answers needed before B1"
 next_recommended_command: "$work"
-user_input_needed: false
+user_input_needed: true

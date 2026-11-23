@@ -33,10 +33,13 @@ non_goals:
   - "Women's basketball."
   - "Any change to cfb-rankings code, schema, or its Supabase database."
   - "Charts or other new data visuals on the site."
+  - "Team search or conference filter on the rankings table (not requested; can follow later)."
 
 constraints:
   technical:
     - "Objective terms, constraints and variable structure of model/model.py in cfb-rankings must be preserved; only constants and sport labels may differ, and they must be configuration."
+    - "The solver is named explicitly in configuration. The parity run uses the same solver and cvxpy version that produced the football golden outputs."
+    - "Parity tolerance: total objective and each of the four term values within 1e-6 relative; ratings within 1e-3 absolute on fixtures built to have a unique solution."
     - "Storage is Cloudflare D1 (SQLite dialect): at most 100 bound parameters per statement, 100 KB per statement, no materialized views, no array or timestamptz types."
     - "Pipeline runs as a Python batch job in GitHub Actions and reaches D1 from outside Workers (REST API or wrangler)."
     - "personal-site stays fully static: it reads JSON from R2 at build time; it does not query D1."
@@ -59,7 +62,10 @@ assumptions:
   - "Data source is CollegeBasketballData (api.collegebasketballdata.com, cbbd client), subject to the non-D-I probe in task B2-T1. Fallback is ESPN-derived data."
   - "Men's basketball only."
   - "Season is keyed by a single integer, following the source's season field (expected: the year the season ends)."
-  - "Basketball week N is a 7-day bucket counted from the Monday on or before the season's first game day; the run happens Monday morning (UTC) and covers games through Sunday."
+  - "Basketball week N is a 7-day bucket (Monday to Sunday, US/Eastern game date) counted from a stored per-season anchor Monday; the Monday run publishes the week that ended the day before."
+  - "Every week from the anchor through the week containing Selection Sunday gets a snapshot, including a quiet holiday week; nothing is published after that."
+  - "Teams are keyed by the source's team id in storage and in the model; names are display only."
+  - "The site labels a basketball season as a span (2026-27) even though it is stored as one integer."
   - "The prior-fade schedule keeps football's formula and week-7 cutoff, applied to basketball week numbers."
   - "R2: same bucket as football with a cbb/ key prefix (cbb/rankings/...), unless the owner prefers a separate bucket."
   - "The site rebuild is triggered by the same Cloudflare Pages deploy hook the football workflow calls."
@@ -119,7 +125,8 @@ research:
     - "NET excludes non-D-I games (secondary sources); the owner chose to mirror football instead."
 
 acceptance_criteria:
-  - "A reviewer can run the ported model with football configuration on a fixed fixture and get the same ratings as cfb-rankings/model/model.py within solver tolerance."
+  - "From one raw football-shaped games and teams fixture, the ported pipeline (derivations, data assembly, prior-season solve, model) with default configuration reproduces golden outputs generated from cfb-rankings @ 8ab8201 within the stated parity tolerance."
+  - "A test pins the default configuration values to the football constants."
   - "A fresh D1 database can be built from the migrations in the repository alone."
   - "A backfill of at least the current and previous season completes within D1 and CBBD free-tier limits."
   - "The weekly workflow publishes cbb/rankings/index.json and a week file that validate against the documented shape, and fails loudly on ingest failure rather than publishing stale rankings."
@@ -128,10 +135,10 @@ acceptance_criteria:
   - "The EQI page describes both sports without football-only terms in the shared formulation."
 
 open_questions:
+  - "Which D1 access path, per B1-T2: REST query from Python, or SQL files applied with wrangler?"
   - "Does CBBD include games against non-D-I opponents, and how can a non-D-I team be identified? (Resolved by task B2-T1; needs network access to api.collegebasketballdata.com or an Actions run.)"
   - "Same R2 bucket with a cbb/ prefix, or a separate bucket?"
   - "Is the shared CFBD/CBBD free quota enough alongside the football job, or will a paid tier be used?"
-  - "Should the rankings table get a team search and conference filter in this effort? (365 rows; not requested.)"
   - "Does the 'Why I Built It' story on the EQI page stay football-framed?"
 
 ready_for_planning: true
