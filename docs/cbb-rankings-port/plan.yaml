@@ -1,0 +1,203 @@
+# Contract: durable execution plan created by $work when the selected mode needs explicit planning
+
+artifact: plan
+feature: "cbb-rankings-port"
+mode: "large-initiative"
+status: draft
+owner_skill: work
+based_on: "docs/cbb-rankings-port/requirements.yaml"
+
+objective: >
+  Deliver D-I men's basketball rankings from the cfb-rankings optimization: CBBD ingestion into
+  Cloudflare D1, the ported and parametrized model, weekly R2 artifacts, a live CBB page on
+  personal-site built on components shared with the CFB page, and a sport-neutral methodology
+  write-up. Seven batches, one PR each.
+
+approach:
+  summary: >
+    cbb-rankings is built bottom-up (storage, ingestion, model, orchestration), each as its own PR.
+    The site refactor (B5) has no dependency on the pipeline and can run alongside B1-B4. The CBB
+    page (B6) is developed against a fixture that follows the artifact contract below, then pointed
+    at real data once B4 has published. The methodology rewrite (B7) comes last, when the
+    basketball configuration is final.
+  key_decisions:
+    - "Storage: Cloudflare D1, reached from Python through a thin client module over the REST API; schema applied with wrangler d1 migrations."
+    - "Source: CollegeBasketballData, gated by a probe for non-D-I opponents before ingestion is built."
+    - "D-I membership is decided per season from the teams/conference-history data; any opponent outside that set is 'non-D-I' and maps to the shared dummy team."
+    - "Model: copied from cfb-rankings and parametrized with a config object; football values are the defaults; the prior-season solve is the same function with the prior term off. The solver is named explicitly."
+    - "Parity is proven by a test that runs the football model's objective and the ported model on the same fixture."
+    - "Cadence: weekly, Monday 10:00 UTC; week N is a 7-day bucket from the Monday on or before the season's first game day."
+    - "Rated games: regular season plus conference tournaments, selected by season_type and tournament fields; the last snapshot is the week containing Selection Sunday."
+    - "Artifacts keep football's JSON shapes under a cbb/ key prefix so the site code is shared."
+    - "Site: per-sport config (data path, labels, conference names, selectors) drives shared rankings components."
+
+contracts:
+  interfaces:
+    - "storage client: query(sql, params) -> rows; execute_many(sql, rows) chunked to 100 bound parameters per statement"
+    - "get_ratings(games, lower_division_losses, records, priors, week, config) -> ratings; no database access inside the model"
+    - "ModelConfig: r_min, r_max, r_lower_min, r_lower_max, gamma_margin, gamma_loss, gamma_lower, target_gap_for_median, max_gap_from_margin, prior_fade_weeks, prior_fade_scale, alpha_neutral, alpha_home_win, alpha_away_win, default_prior, solver"
+    - "R2 keys: cbb/rankings/{season}/week-{WW}.json, cbb/rankings/{season}/latest.json, cbb/rankings/latest.json, cbb/rankings/index.json"
+    - "Week file: {season, week, generated_at_utc, rankings:[{rank, team, conference, logo, record, rating, delta}]}"
+    - "Index file: {generated_at_utc, latest_season, latest_week, seasons:[{season, weeks:[int]}]}"
+    - "site sport config: {slug, dataDir, r2Prefix, periodLabel, conferenceShortNames, views}"
+  schemas:
+    - "teams(id, season, school, abbreviation, conference, primary_color, secondary_color, logo, PRIMARY KEY (id, season))"
+    - "games(id PRIMARY KEY, season, week, season_type, tournament, start_date TEXT ISO, home_team_id, home_team, home_score, away_team_id, away_team, away_score, neutral_site, conference_game, periods, status, margin, winner, alpha)"
+    - "ratings(team, season, week, rating, wins, losses, PRIMARY KEY (team, season, week)); ratings_staging with the same columns"
+    - "rated_games view: games where the game is final and is regular season or a conference tournament"
+  config_changes:
+    - "cbb-rankings secrets (names only): CBBD_API_KEY, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_D1_DATABASE_ID, CLOUDFLARE_API_TOKEN, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, PERSONAL_SITE_DEPLOY_HOOK_URL"
+    - "personal-site: public/_headers img-src gains the basketball logo host; .gitignore gains public/data/cbb/"
+
+branching:
+  strategy: "single-branch"
+  branch_name: "claude/sleepy-tesla-rnjsvt"
+  worktrees: []
+
+execution_batches:
+  - id: "B1"
+    goal: "cbb-rankings PR 1: project scaffold and D1 storage"
+    tasks:
+      - id: "B1-T1"
+        title: "Verify D1 access facts"
+        objective: "Confirm from Cloudflare's documentation the REST query endpoint and its batch limits, wrangler d1 migrations behavior, token scoping, and the free-plan backup window; record them in the PR description."
+        assigned_domain: "platform-engineer"
+        model_routing: {task_profile: "research", uncertainty: "medium", consequence: "medium", scope_size: "narrow", determinism: "interpretive", requested_tier: "balanced", requested_reasoning: "medium", provider_model: "Claude Sonnet", routing_enforced: false, escalation_tier: "frontier", escalation_condition: "documentation conflicts on limits"}
+        owned_scope: []
+        forbidden_scope: ["cfb-rankings/**", "personal-site/**"]
+        dependencies: []
+        parallelizable: false
+        expected_validation: ["facts cited with URLs"]
+      - id: "B1-T2"
+        title: "Scaffold, schema and storage client"
+        objective: "pyproject with uv and pytest as a dev dependency, Python 3.12, migrations for teams/games/ratings/ratings_staging and the rated_games view, the storage client with chunked writes, a CI workflow that runs the tests, and AGENTS.md/README updates."
+        assigned_domain: "data-engineer"
+        model_routing: {task_profile: "implementation", uncertainty: "medium", consequence: "medium", scope_size: "bounded", determinism: "interpretive", requested_tier: "balanced", requested_reasoning: "medium", provider_model: "Claude Sonnet", routing_enforced: false, escalation_tier: "frontier", escalation_condition: "D1 limits force a different write strategy"}
+        owned_scope: ["cbb-rankings/pyproject.toml", "cbb-rankings/database/**", "cbb-rankings/tests/**", "cbb-rankings/.github/workflows/tests.yml", "cbb-rankings/README.md", "cbb-rankings/AGENTS.md"]
+        forbidden_scope: ["cbb-rankings/.agents/**", "cfb-rankings/**", "personal-site/**"]
+        dependencies: ["B1-T1"]
+        parallelizable: false
+        expected_validation: ["migrations apply to a local SQLite/D1 database", "storage client tests pass against a fake transport", "pytest runs in CI"]
+  - id: "B2"
+    goal: "cbb-rankings PR 2: ingestion"
+    tasks:
+      - id: "B2-T1"
+        title: "Probe CBBD for non-D-I opponents"
+        objective: "Pull one season of games and teams and establish whether non-D-I opponents are present, how they are identified, the season keying, the season_type and tournament values, and how unplayed games are marked. Stop and report if non-D-I games are absent."
+        assigned_domain: "data-engineer"
+        model_routing: {task_profile: "research", uncertainty: "high", consequence: "high", scope_size: "narrow", determinism: "interpretive", requested_tier: "balanced", requested_reasoning: "medium", provider_model: "Claude Sonnet", routing_enforced: false, escalation_tier: "frontier", escalation_condition: "source cannot represent non-D-I games"}
+        owned_scope: []
+        forbidden_scope: ["cfb-rankings/**", "personal-site/**"]
+        dependencies: ["B1-T2"]
+        parallelizable: false
+        expected_validation: ["written findings with sample rows; counts of games per season_type"]
+      - id: "B2-T2"
+        title: "Teams, games, derivations, overrides and backfill"
+        objective: "Retrying HTTP session, teams and conference membership per season, games by date range, D-I classification, winner/margin/alpha derivations, basketball week assignment, an empty overrides file with its mechanism, and a dry-run-by-default backfill script and workflow."
+        assigned_domain: "data-engineer"
+        model_routing: {task_profile: "implementation", uncertainty: "medium", consequence: "medium", scope_size: "bounded", determinism: "interpretive", requested_tier: "balanced", requested_reasoning: "medium", provider_model: "Claude Sonnet", routing_enforced: false, escalation_tier: "frontier", escalation_condition: "probe findings contradict the schema"}
+        owned_scope: ["cbb-rankings/ingest/**", "cbb-rankings/scripts/**", "cbb-rankings/tests/**", "cbb-rankings/.github/workflows/backfill-games.yml", "cbb-rankings/database/migrations/**"]
+        forbidden_scope: ["cbb-rankings/.agents/**", "cfb-rankings/**", "personal-site/**"]
+        dependencies: ["B2-T1"]
+        parallelizable: false
+        expected_validation: ["unit tests on recorded API responses", "week assignment tests across a season boundary", "API call count for a two-season backfill stated"]
+  - id: "B3"
+    goal: "cbb-rankings PR 3: the model"
+    tasks:
+      - id: "B3-T1"
+        title: "Port and parametrize the optimization"
+        objective: "Model, prior solve and data assembly with ModelConfig, football defaults, a named solver, no database access inside the model, and the dummy lower-division team."
+        assigned_domain: "data-scientist"
+        model_routing: {task_profile: "implementation", uncertainty: "medium", consequence: "high", scope_size: "bounded", determinism: "interpretive", requested_tier: "frontier", requested_reasoning: "high", provider_model: "Claude Opus", routing_enforced: false, escalation_tier: "frontier", escalation_condition: "parity cannot be reached within solver tolerance"}
+        owned_scope: ["cbb-rankings/model/**", "cbb-rankings/tests/**"]
+        forbidden_scope: ["cbb-rankings/.agents/**", "cfb-rankings/**", "personal-site/**"]
+        dependencies: ["B1-T2"]
+        parallelizable: false
+        expected_validation: ["parity test: same fixture through cfb-rankings model objective and the ported model, ratings equal within tolerance", "tests for the lower-division loss term, neutral/home/away alpha, prior fade to zero, and a disconnected schedule"]
+  - id: "B4"
+    goal: "cbb-rankings PR 4: weekly run and publishing"
+    tasks:
+      - id: "B4-T1"
+        title: "Orchestration, ratings write, R2 artifacts, workflows"
+        objective: "main entry point (ingest, overrides, model, write, publish) with failure markers, week resolution, staging mode, rankings artifacts under cbb/, the weekly workflow with season-window guard and deploy hook, and a staging workflow."
+        assigned_domain: "data-engineer"
+        model_routing: {task_profile: "implementation", uncertainty: "medium", consequence: "medium", scope_size: "bounded", determinism: "interpretive", requested_tier: "balanced", requested_reasoning: "medium", provider_model: "Claude Sonnet", routing_enforced: false, escalation_tier: "frontier", escalation_condition: "week resolution rules are ambiguous at season edges"}
+        owned_scope: ["cbb-rankings/main.py", "cbb-rankings/artifacts/**", "cbb-rankings/tests/**", "cbb-rankings/.github/workflows/weekly-update.yml", "cbb-rankings/.github/workflows/test-week-run.yml"]
+        forbidden_scope: ["cbb-rankings/.agents/**", "cfb-rankings/**", "personal-site/**"]
+        dependencies: ["B2-T2", "B3-T1"]
+        parallelizable: false
+        expected_validation: ["artifact shape tests", "a staging run for one past week succeeds end to end", "workflow fails when ingest fails"]
+  - id: "B5"
+    goal: "personal-site PR 1: shared rankings components"
+    tasks:
+      - id: "B5-T1"
+        title: "Extract toolbar, selectors and table refresh from the CFB page"
+        objective: "Per-sport config, shared toolbar/tabs/selector components and client script, sport-parameterized fetch script and conference names; the CFB page's output stays the same."
+        assigned_domain: "frontend-engineer"
+        model_routing: {task_profile: "implementation", uncertainty: "medium", consequence: "high", scope_size: "bounded", determinism: "interpretive", requested_tier: "frontier", requested_reasoning: "high", provider_model: "Claude Opus", routing_enforced: false, escalation_tier: "frontier", escalation_condition: "parity cannot be kept without changing DESIGN.md rules"}
+        owned_scope: ["personal-site/src/pages/projects/cfb-rankings/**", "personal-site/src/components/**", "personal-site/src/lib/**", "personal-site/scripts/**", "personal-site/DESIGN.md"]
+        forbidden_scope: ["personal-site/.agents/**", "personal-site/src/pages/projects/cbb-rankings.astro", "cbb-rankings/**", "cfb-rankings/**"]
+        dependencies: []
+        parallelizable: true
+        expected_validation: ["built CFB page HTML diffed before and after", "astro check", "DESIGN.md checklist: JS-off parity, 390px, tab keyboard behavior, season/week switching"]
+  - id: "B6"
+    goal: "personal-site PR 2: the CBB page"
+    tasks:
+      - id: "B6-T1"
+        title: "Live CBB rankings page"
+        objective: "CBB sport config and conference names, fixture generator at realistic scale, the rankings page on the shared components (table only), CSP and gitignore entries, project status copy."
+        assigned_domain: "frontend-engineer"
+        model_routing: {task_profile: "implementation", uncertainty: "low", consequence: "medium", scope_size: "bounded", determinism: "interpretive", requested_tier: "balanced", requested_reasoning: "medium", provider_model: "Claude Sonnet", routing_enforced: false, escalation_tier: "frontier", escalation_condition: "365 rows breaks the layout or performance budget"}
+        owned_scope: ["personal-site/src/pages/projects/cbb-rankings.astro", "personal-site/src/lib/**", "personal-site/scripts/**", "personal-site/public/_headers", "personal-site/.gitignore", "personal-site/README.md"]
+        forbidden_scope: ["personal-site/.agents/**", "personal-site/src/pages/projects/cfb-rankings/**", "cbb-rankings/**", "cfb-rankings/**"]
+        dependencies: ["B5-T1"]
+        parallelizable: false
+        expected_validation: ["build with fixture and with no data (empty state)", "astro check", "screenshots at 390px and desktop", "DESIGN.md checklist"]
+  - id: "B7"
+    goal: "personal-site PR 3: sport-neutral methodology"
+    tasks:
+      - id: "B7-T1"
+        title: "Generalize the EQI methodology"
+        objective: "Shared formulation with sport-neutral naming for the lower-division term, a per-sport parameter table generated from one data file, and revised 'How It Works' points; DESIGN.md 'Later' note removed."
+        assigned_domain: "frontend-engineer"
+        model_routing: {task_profile: "implementation", uncertainty: "low", consequence: "medium", scope_size: "narrow", determinism: "interpretive", requested_tier: "balanced", requested_reasoning: "medium", provider_model: "Claude Sonnet", routing_enforced: false, escalation_tier: "frontier", escalation_condition: "copy decisions need the owner"}
+        owned_scope: ["personal-site/src/pages/projects/entrekin-quadratic-index.astro", "personal-site/src/lib/**", "personal-site/DESIGN.md"]
+        forbidden_scope: ["personal-site/.agents/**", "cbb-rankings/**", "cfb-rankings/**"]
+        dependencies: ["B3-T1"]
+        parallelizable: false
+        expected_validation: ["equations render at build", "every constant on the page matches the model configs", "astro check", "390px equation overflow check"]
+
+ordering_notes:
+  - "B1 -> B2 -> B4, with B3 after B1 and before B4."
+  - "B5 is independent of B1-B4 and can start immediately."
+  - "B6 follows B5; it is developed on a fixture and merged once B4 has published real data."
+  - "B7 follows B3."
+  - "Each batch stops at its own PR and review before the next batch that depends on it."
+
+risks:
+  - "CBBD may omit non-D-I games or give no way to identify them; B2-T1 is the gate and ESPN-derived data is the fallback."
+  - "Football constants on basketball data may give odd results: the prior fades out after 7 of about 20 weeks, the margin cap is in football-scaled units, and the home/away multipliers are larger than basketball's home-court effect. Accepted by the owner for launch."
+  - "Problem size grows from about 130 teams and 800 games to about 365 teams and 6,000 games, and the prior solve repeats on every run; solve time needs measuring in B3."
+  - "D1 facts that shape the client are unverified until B1-T1."
+  - "The shared CFBD/CBBD quota could starve the football job during a backfill."
+  - "The site refactor touches the live football page; parity is checked by HTML diff and the manual checklist because the site has no automated tests."
+  - "Hand-mirrored JSON shapes across repositories can drift; the fixture and the artifact tests must follow the contract above."
+
+model_routing_notes:
+  - "Frontier tier for the model port and the CFB page refactor, where a subtle error is costly; balanced elsewhere."
+  - "Subagent model selection is by model name at spawn; reasoning level is not independently controllable."
+
+open_questions:
+  - "R2: shared bucket with cbb/ prefix or a separate bucket?"
+  - "Paid CBBD tier or free quota?"
+  - "Team search and conference filter on the 365-row table in B6?"
+  - "Does 'Why I Built It' stay football-framed in B7?"
+
+review:
+  status: draft
+  loop_count: 0
+  notes: []
+
+checkpoint:
+  required_before_execution: true
+  status: pending

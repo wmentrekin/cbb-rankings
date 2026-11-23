@@ -3,7 +3,7 @@
 artifact: status
 feature: "cbb-rankings-port"
 mode: "large-initiative"
-stage: "discovery"
+stage: "planning"
 owner_skill: work
 
 objective: >
@@ -44,13 +44,13 @@ branching:
   branch_name: "claude/sleepy-tesla-rnjsvt"
 
 summary:
-  current_focus: "Discovery: cfb-rankings methodology and pipeline, personal-site design system and rankings pages, external CBB data sources and Cloudflare storage options"
-  last_completed: "Repository sync preflight for all three repositories"
+  current_focus: "Planning: plan critique by reviewer, then the pre-execution checkpoint"
+  last_completed: "Discovery complete; owner decisions recorded; requirements.yaml and plan.yaml drafted"
   current_blocker: ""
 
 artifacts:
-  requirements: null
-  plan: null
+  requirements: "docs/cbb-rankings-port/requirements.yaml"
+  plan: "docs/cbb-rankings-port/plan.yaml"
   implementation_report: null
 
 pr:
@@ -80,11 +80,11 @@ agents:
     requested_model_tier: "balanced"
     requested_reasoning: "medium"
     requested_provider_model: "sonnet"
-    actual_model: ""
-    actual_reasoning: ""
+    actual_model: "claude-sonnet-5-5"
+    actual_reasoning: "not independently controllable"
     routing_enforced: true
     escalation_count: 0
-    status: "running"
+    status: "done"
     stage: "discovery"
     task: "cfb-rankings: model formulation, football-specific logic, ingestion, storage, artifact publishing, CI"
     last_update: "2026-11-23"
@@ -95,11 +95,11 @@ agents:
     requested_model_tier: "balanced"
     requested_reasoning: "medium"
     requested_provider_model: "sonnet"
-    actual_model: ""
-    actual_reasoning: ""
+    actual_model: "claude-sonnet-5-5"
+    actual_reasoning: "not independently controllable"
     routing_enforced: true
     escalation_count: 0
-    status: "running"
+    status: "done"
     stage: "discovery"
     task: "personal-site: design system, rankings components, data flow, Cloudflare usage, methodology section, cbb stub"
     last_update: "2026-11-23"
@@ -110,13 +110,29 @@ agents:
     requested_model_tier: "balanced"
     requested_reasoning: "medium"
     requested_provider_model: "sonnet"
+    actual_model: "claude-sonnet-5-5"
+    actual_reasoning: "not independently controllable"
+    routing_enforced: true
+    escalation_count: 0
+    status: "done"
+    stage: "discovery"
+    task: "CBB data sources (APIs, terms, coverage of non-D-I games) and Cloudflare D1 vs Supabase for a Python batch pipeline"
+    last_update: "2026-11-23"
+    blocker: ""
+
+  - id: "reviewer-1"
+    role: "reviewer"
+    task_profile: "review"
+    requested_model_tier: "balanced"
+    requested_reasoning: "medium"
+    requested_provider_model: "sonnet"
     actual_model: ""
     actual_reasoning: ""
     routing_enforced: true
     escalation_count: 0
     status: "running"
-    stage: "discovery"
-    task: "CBB data sources (APIs, terms, coverage of non-D-I games) and Cloudflare D1 vs Supabase for a Python batch pipeline"
+    stage: "planning"
+    task: "critique requirements.yaml and plan.yaml against the code"
     last_update: "2026-11-23"
     blocker: ""
 
@@ -141,13 +157,22 @@ blockers: []
 decisions:
   - "Branch: the session's designated branch claude/sleepy-tesla-rnjsvt is used in place of work/<feature-slug> in all three repositories."
   - "Mode large-initiative: multiple repositories, multiple PRs, explicit batches."
+  - "Owner: storage is Cloudflare D1."
+  - "Owner: non-D-I opponents mirror football's FCS dummy-team handling."
+  - "Owner: weekly run only."
+  - "Owner: copy and parametrize the model; no shared package yet."
+  - "Owner: rate games through conference tournaments; NCAA tournament not rated."
+  - "Owner: extract shared site components from the CFB page first."
+  - "Owner: no need to recreate the Season Grid yet; CBB page is the rankings table only."
+  - "Owner: keep football constants at launch."
 
 model_routing:
   provider: "Claude Code / Anthropic"
   provider_map_verified_at: "2026-09-07"
-  substitutions: []
+  substitutions:
+    - "balanced tier resolved to claude-sonnet-5-5 (the map lists Sonnet 5)"
   unresolved_limitations: []
 
-next_action: "Integrate discovery findings, ask the user the open product questions, then draft requirements.yaml and plan.yaml"
+next_action: "Integrate reviewer findings into plan.yaml, then stop at the pre-execution checkpoint"
 next_recommended_command: "$work"
 user_input_needed: false
