@@ -1,0 +1,4445 @@
+{
+ "provenance": {
+  "repository": "cfb-rankings",
+  "commit": "8ab8201",
+  "generated_by": "tests/reference/generate_goldens.py",
+  "python": "3.12.3",
+  "versions": {
+   "cvxpy": "1.8.1",
+   "numpy": "2.4.2",
+   "pandas": "2.3.3",
+   "clarabel": "0.11.1",
+   "osqp": "1.1.1",
+   "scs": "3.2.11",
+   "networkx": "3.6.1",
+   "scipy": "1.17.0"
+  },
+  "installed_solvers": [
+   "CLARABEL",
+   "HIGHS",
+   "OSQP",
+   "SCIPY",
+   "SCS"
+  ],
+  "default_solver_for_main_problem": "OSQP"
+ },
+ "prior_season": {
+  "year": 2023,
+  "ratings": {
+   "Glenrock": 20.337310803675884,
+   "Ashford": 19.305815716169164,
+   "Hartwell": 18.983550434116548,
+   "fcs": 15.0,
+   "Ironwood": 13.040146788324122,
+   "Bexley": 10.243459660791581,
+   "Fairmont": 10.121105512957529,
+   "Carlow": 7.947057234600675,
+   "Millbrook": 7.162301086538565,
+   "Eastvale": 4.635180091414008,
+   "Larkspur": 0.7063554599161005,
+   "Redfern": 0.15221122947220084,
+   "Northgate": 0.01,
+   "Dunmore": 0.01,
+   "Kingsley": 0.01,
+   "Juniper": 0.01
+  },
+  "objective": 543.7151811116859,
+  "terms": {
+   "margin": 488.3161021303315,
+   "loss_rate": 53.3818102387108,
+   "fcs_loss": 2.017268742643532,
+   "prior": 0.0
+  },
+  "r_fcs": 15.0,
+  "solver": "OSQP"
+ },
+ "scenarios": {
+  "w03": {
+   "year": 2024,
+   "week": 3,
+   "ratings": {
+    "Oakhurst": 32.32333495213332,
+    "Ashford": 23.527519560632737,
+    "Kingsley": 21.548461538461538,
+    "Millbrook": 21.413072850071618,
+    "Hartwell": 18.983550434116538,
+    "fcs": 15.0,
+    "Ironwood": 11.903144660948563,
+    "Carlow": 7.041732480189682,
+    "Fairmont": 4.772034568496098,
+    "Glenrock": 0.8890627673738091,
+    "Larkspur": 0.7063554599161002,
+    "Dunmore": 0.39107362430010406,
+    "Juniper": 0.09079859608360649,
+    "Bexley": 0.01,
+    "Northgate": 0.01,
+    "Eastvale": 0.009999999999999998
+   },
+   "records": {
+    "Ashford": [
+     3,
+     0,
+     0
+    ],
+    "Bexley": [
+     1,
+     2,
+     0
+    ],
+    "Carlow": [
+     2,
+     1,
+     0
+    ],
+    "Dunmore": [
+     1,
+     2,
+     0
+    ],
+    "Eastvale": [
+     0,
+     1,
+     0
+    ],
+    "Fairmont": [
+     1,
+     1,
+     0
+    ],
+    "Glenrock": [
+     1,
+     1,
+     0
+    ],
+    "Hartwell": [
+     1,
+     0,
+     0
+    ],
+    "Ironwood": [
+     2,
+     1,
+     0
+    ],
+    "Juniper": [
+     1,
+     2,
+     0
+    ],
+    "Kingsley": [
+     3,
+     0,
+     0
+    ],
+    "Larkspur": [
+     0,
+     0,
+     0
+    ],
+    "Millbrook": [
+     2,
+     0,
+     0
+    ],
+    "Northgate": [
+     0,
+     3,
+     0
+    ],
+    "Oakhurst": [
+     2,
+     0,
+     0
+    ]
+   },
+   "main": {
+    "objective": 103.66835622282439,
+    "terms": {
+     "margin": 61.10217997043133,
+     "loss_rate": 13.607442260391098,
+     "fcs_loss": 16.38050000000004,
+     "prior": 12.578233992001918
+    },
+    "r_fcs": 15.0,
+    "solver": "OSQP"
+   },
+   "assembled": {
+    "teams": [
+     "Ashford",
+     "Bexley",
+     "Carlow",
+     "Dunmore",
+     "Eastvale",
+     "Fairmont",
+     "Glenrock",
+     "Hartwell",
+     "Ironwood",
+     "Juniper",
+     "Kingsley",
+     "Larkspur",
+     "Millbrook",
+     "Northgate",
+     "Oakhurst"
+    ],
+    "games": [
+     [
+      "Bexley",
+      "Ashford",
+      0,
+      "Ashford",
+      12,
+      1.2,
+      1,
+      2024
+     ],
+     [
+      "Ironwood",
+      "Dunmore",
+      0,
+      "Ironwood",
+      14,
+      0.8,
+      1,
+      2024
+     ],
+     [
+      "Northgate",
+      "Juniper",
+      0,
+      "Juniper",
+      21,
+      1.2,
+      1,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Carlow",
+      0,
+      "Millbrook",
+      7,
+      0.8,
+      1,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      9,
+      1.2,
+      2,
+      2024
+     ],
+     [
+      "Kingsley",
+      "Glenrock",
+      0,
+      "Kingsley",
+      31,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Juniper",
+      "Ironwood",
+      0,
+      "Ironwood",
+      24,
+      1.2,
+      2,
+      2024
+     ],
+     [
+      "Ashford",
+      "Northgate",
+      0,
+      "Ashford",
+      62,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Carlow",
+      "Dunmore",
+      0,
+      "Carlow",
+      7,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Juniper",
+      0,
+      "Fairmont",
+      22,
+      0.8,
+      3,
+      2024
+     ],
+     [
+      "Northgate",
+      "Kingsley",
+      0,
+      "Kingsley",
+      48,
+      1.2,
+      3,
+      2024
+     ],
+     [
+      "Ironwood",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      20,
+      1.2,
+      3,
+      2024
+     ],
+     [
+      "Dunmore",
+      "Bexley",
+      0,
+      "Dunmore",
+      22,
+      0.8,
+      3,
+      2024
+     ]
+    ],
+    "fcs_losses": [
+     [
+      "Eastvale",
+      14,
+      1.2,
+      2,
+      2024
+     ]
+    ],
+    "records": {
+     "Ashford": [
+      3,
+      0,
+      0
+     ],
+     "Bexley": [
+      1,
+      2,
+      0
+     ],
+     "Carlow": [
+      2,
+      1,
+      0
+     ],
+     "Dunmore": [
+      1,
+      2,
+      0
+     ],
+     "Eastvale": [
+      0,
+      1,
+      0
+     ],
+     "Fairmont": [
+      1,
+      1,
+      0
+     ],
+     "Glenrock": [
+      1,
+      1,
+      0
+     ],
+     "Hartwell": [
+      1,
+      0,
+      0
+     ],
+     "Ironwood": [
+      2,
+      1,
+      0
+     ],
+     "Juniper": [
+      1,
+      2,
+      0
+     ],
+     "Kingsley": [
+      3,
+      0,
+      0
+     ],
+     "Larkspur": [
+      0,
+      0,
+      0
+     ],
+     "Millbrook": [
+      2,
+      0,
+      0
+     ],
+     "Northgate": [
+      0,
+      3,
+      0
+     ],
+     "Oakhurst": [
+      2,
+      0,
+      0
+     ]
+    },
+    "connectivity": 0.8
+   },
+   "lambda": 0.005714285714285714,
+   "non_unique_teams": []
+  },
+  "w06": {
+   "year": 2024,
+   "week": 6,
+   "ratings": {
+    "Ashford": 37.57246831945642,
+    "Oakhurst": 29.86973787388278,
+    "Kingsley": 23.343333333333334,
+    "fcs": 15.0,
+    "Millbrook": 14.09437267955034,
+    "Hartwell": 7.039928739226391,
+    "Ironwood": 6.694587527422287,
+    "Dunmore": 5.604134823380847,
+    "Larkspur": 5.367789566853552,
+    "Glenrock": 4.701921544969036,
+    "Fairmont": 3.0333783013304294,
+    "Bexley": 2.4610741655565844,
+    "Carlow": 0.6208306589368462,
+    "Northgate": 0.01,
+    "Juniper": 0.009999999999999998,
+    "Eastvale": 0.009999999999999998
+   },
+   "records": {
+    "Ashford": [
+     5,
+     0,
+     0
+    ],
+    "Bexley": [
+     3,
+     2,
+     0
+    ],
+    "Carlow": [
+     3,
+     3,
+     0
+    ],
+    "Dunmore": [
+     4,
+     2,
+     0
+    ],
+    "Eastvale": [
+     0,
+     3,
+     0
+    ],
+    "Fairmont": [
+     2,
+     2,
+     0
+    ],
+    "Glenrock": [
+     2,
+     2,
+     0
+    ],
+    "Hartwell": [
+     2,
+     1,
+     0
+    ],
+    "Ironwood": [
+     2,
+     3,
+     0
+    ],
+    "Juniper": [
+     1,
+     5,
+     0
+    ],
+    "Kingsley": [
+     4,
+     0,
+     0
+    ],
+    "Larkspur": [
+     2,
+     1,
+     0
+    ],
+    "Millbrook": [
+     4,
+     1,
+     0
+    ],
+    "Northgate": [
+     0,
+     5,
+     0
+    ],
+    "Oakhurst": [
+     4,
+     0,
+     0
+    ]
+   },
+   "main": {
+    "objective": 206.98798375358277,
+    "terms": {
+     "margin": 148.17579181402985,
+     "loss_rate": 22.58561673649448,
+     "fcs_loss": 32.76100000000008,
+     "prior": 3.4655752030583744
+    },
+    "r_fcs": 15.0,
+    "solver": "OSQP"
+   },
+   "assembled": {
+    "teams": [
+     "Ashford",
+     "Bexley",
+     "Carlow",
+     "Dunmore",
+     "Eastvale",
+     "Fairmont",
+     "Glenrock",
+     "Hartwell",
+     "Ironwood",
+     "Juniper",
+     "Kingsley",
+     "Larkspur",
+     "Millbrook",
+     "Northgate",
+     "Oakhurst"
+    ],
+    "games": [
+     [
+      "Bexley",
+      "Ashford",
+      0,
+      "Ashford",
+      12,
+      1.2,
+      1,
+      2024
+     ],
+     [
+      "Ironwood",
+      "Dunmore",
+      0,
+      "Ironwood",
+      14,
+      0.8,
+      1,
+      2024
+     ],
+     [
+      "Northgate",
+      "Juniper",
+      0,
+      "Juniper",
+      21,
+      1.2,
+      1,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Carlow",
+      0,
+      "Millbrook",
+      7,
+      0.8,
+      1,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      9,
+      1.2,
+      2,
+      2024
+     ],
+     [
+      "Kingsley",
+      "Glenrock",
+      0,
+      "Kingsley",
+      31,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Juniper",
+      "Ironwood",
+      0,
+      "Ironwood",
+      24,
+      1.2,
+      2,
+      2024
+     ],
+     [
+      "Ashford",
+      "Northgate",
+      0,
+      "Ashford",
+      62,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Carlow",
+      "Dunmore",
+      0,
+      "Carlow",
+      7,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Juniper",
+      0,
+      "Fairmont",
+      22,
+      0.8,
+      3,
+      2024
+     ],
+     [
+      "Northgate",
+      "Kingsley",
+      0,
+      "Kingsley",
+      48,
+      1.2,
+      3,
+      2024
+     ],
+     [
+      "Ironwood",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      20,
+      1.2,
+      3,
+      2024
+     ],
+     [
+      "Dunmore",
+      "Bexley",
+      0,
+      "Dunmore",
+      22,
+      0.8,
+      3,
+      2024
+     ],
+     [
+      "Juniper",
+      "Dunmore",
+      0,
+      "Dunmore",
+      31,
+      1.2,
+      4,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Eastvale",
+      0,
+      "Millbrook",
+      10,
+      0.8,
+      4,
+      2024
+     ],
+     [
+      "Glenrock",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      25,
+      1.2,
+      4,
+      2024
+     ],
+     [
+      "Bexley",
+      "Fairmont",
+      0,
+      "Bexley",
+      7,
+      0.8,
+      4,
+      2024
+     ],
+     [
+      "Hartwell",
+      "Ironwood",
+      0,
+      "Hartwell",
+      1,
+      1.0,
+      4,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Eastvale",
+      0,
+      "Fairmont",
+      5,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Ashford",
+      "Ironwood",
+      0,
+      "Ashford",
+      45,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Larkspur",
+      "Carlow",
+      0,
+      "Larkspur",
+      3,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Juniper",
+      0,
+      "Millbrook",
+      21,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Kingsley",
+      "Hartwell",
+      0,
+      "Kingsley",
+      12,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Glenrock",
+      "Northgate",
+      0,
+      "Glenrock",
+      88,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Ashford",
+      0,
+      "Ashford",
+      23,
+      1.2,
+      6,
+      2024
+     ],
+     [
+      "Larkspur",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      17,
+      1.2,
+      6,
+      2024
+     ],
+     [
+      "Dunmore",
+      "Carlow",
+      1,
+      "Dunmore",
+      10,
+      0.8,
+      6,
+      2024
+     ]
+    ],
+    "fcs_losses": [
+     [
+      "Eastvale",
+      14,
+      1.2,
+      2,
+      2024
+     ],
+     [
+      "Northgate",
+      12,
+      1.2,
+      4,
+      2024
+     ],
+     [
+      "Juniper",
+      21,
+      0.8,
+      6,
+      2024
+     ]
+    ],
+    "records": {
+     "Ashford": [
+      5,
+      0,
+      0
+     ],
+     "Bexley": [
+      3,
+      2,
+      0
+     ],
+     "Carlow": [
+      3,
+      3,
+      0
+     ],
+     "Dunmore": [
+      4,
+      2,
+      0
+     ],
+     "Eastvale": [
+      0,
+      3,
+      0
+     ],
+     "Fairmont": [
+      2,
+      2,
+      0
+     ],
+     "Glenrock": [
+      2,
+      2,
+      0
+     ],
+     "Hartwell": [
+      2,
+      1,
+      0
+     ],
+     "Ironwood": [
+      2,
+      3,
+      0
+     ],
+     "Juniper": [
+      1,
+      5,
+      0
+     ],
+     "Kingsley": [
+      4,
+      0,
+      0
+     ],
+     "Larkspur": [
+      2,
+      1,
+      0
+     ],
+     "Millbrook": [
+      4,
+      1,
+      0
+     ],
+     "Northgate": [
+      0,
+      5,
+      0
+     ],
+     "Oakhurst": [
+      4,
+      0,
+      0
+     ]
+    },
+    "connectivity": 1.0
+   },
+   "lambda": 0.0014285714285714286,
+   "non_unique_teams": []
+  },
+  "w07": {
+   "year": 2024,
+   "week": 7,
+   "ratings": {
+    "Ashford": 39.45848043214231,
+    "Oakhurst": 34.3202278646107,
+    "Kingsley": 26.03663327543999,
+    "Millbrook": 15.458490833219749,
+    "fcs": 15.00001732325855,
+    "Hartwell": 6.906983110723217,
+    "Ironwood": 6.755172536145018,
+    "Dunmore": 5.49339909038752,
+    "Larkspur": 5.467234009397675,
+    "Fairmont": 2.805531331182312,
+    "Bexley": 1.410440550028536,
+    "Carlow": 0.6975853895555807,
+    "Northgate": 0.010000012169481876,
+    "Glenrock": 0.009999941760085,
+    "Eastvale": 0.009991258608405516,
+    "Juniper": 0.009991171336870327
+   },
+   "records": {
+    "Ashford": [
+     5,
+     0,
+     0
+    ],
+    "Bexley": [
+     3,
+     3,
+     0
+    ],
+    "Carlow": [
+     3,
+     4,
+     0
+    ],
+    "Dunmore": [
+     4,
+     2,
+     0
+    ],
+    "Eastvale": [
+     1,
+     3,
+     0
+    ],
+    "Fairmont": [
+     2,
+     2,
+     0
+    ],
+    "Glenrock": [
+     2,
+     3,
+     0
+    ],
+    "Hartwell": [
+     2,
+     1,
+     0
+    ],
+    "Ironwood": [
+     2,
+     3,
+     0
+    ],
+    "Juniper": [
+     1,
+     5,
+     0
+    ],
+    "Kingsley": [
+     4,
+     0,
+     0
+    ],
+    "Larkspur": [
+     2,
+     1,
+     0
+    ],
+    "Millbrook": [
+     5,
+     1,
+     0
+    ],
+    "Northgate": [
+     0,
+     5,
+     0
+    ],
+    "Oakhurst": [
+     5,
+     0,
+     0
+    ]
+   },
+   "main": {
+    "objective": 219.0956326852194,
+    "terms": {
+     "margin": 167.50320082965746,
+     "loss_rate": 18.832376968695527,
+     "fcs_loss": 32.760054886866456,
+     "prior": 0.0
+    },
+    "r_fcs": 15.00001732325855,
+    "solver": "OSQP"
+   },
+   "assembled": {
+    "teams": [
+     "Ashford",
+     "Bexley",
+     "Carlow",
+     "Dunmore",
+     "Eastvale",
+     "Fairmont",
+     "Glenrock",
+     "Hartwell",
+     "Ironwood",
+     "Juniper",
+     "Kingsley",
+     "Larkspur",
+     "Millbrook",
+     "Northgate",
+     "Oakhurst"
+    ],
+    "games": [
+     [
+      "Bexley",
+      "Ashford",
+      0,
+      "Ashford",
+      12,
+      1.2,
+      1,
+      2024
+     ],
+     [
+      "Ironwood",
+      "Dunmore",
+      0,
+      "Ironwood",
+      14,
+      0.8,
+      1,
+      2024
+     ],
+     [
+      "Northgate",
+      "Juniper",
+      0,
+      "Juniper",
+      21,
+      1.2,
+      1,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Carlow",
+      0,
+      "Millbrook",
+      7,
+      0.8,
+      1,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      9,
+      1.2,
+      2,
+      2024
+     ],
+     [
+      "Kingsley",
+      "Glenrock",
+      0,
+      "Kingsley",
+      31,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Juniper",
+      "Ironwood",
+      0,
+      "Ironwood",
+      24,
+      1.2,
+      2,
+      2024
+     ],
+     [
+      "Ashford",
+      "Northgate",
+      0,
+      "Ashford",
+      62,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Carlow",
+      "Dunmore",
+      0,
+      "Carlow",
+      7,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Juniper",
+      0,
+      "Fairmont",
+      22,
+      0.8,
+      3,
+      2024
+     ],
+     [
+      "Northgate",
+      "Kingsley",
+      0,
+      "Kingsley",
+      48,
+      1.2,
+      3,
+      2024
+     ],
+     [
+      "Ironwood",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      20,
+      1.2,
+      3,
+      2024
+     ],
+     [
+      "Dunmore",
+      "Bexley",
+      0,
+      "Dunmore",
+      22,
+      0.8,
+      3,
+      2024
+     ],
+     [
+      "Juniper",
+      "Dunmore",
+      0,
+      "Dunmore",
+      31,
+      1.2,
+      4,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Eastvale",
+      0,
+      "Millbrook",
+      10,
+      0.8,
+      4,
+      2024
+     ],
+     [
+      "Glenrock",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      25,
+      1.2,
+      4,
+      2024
+     ],
+     [
+      "Bexley",
+      "Fairmont",
+      0,
+      "Bexley",
+      7,
+      0.8,
+      4,
+      2024
+     ],
+     [
+      "Hartwell",
+      "Ironwood",
+      0,
+      "Hartwell",
+      1,
+      1.0,
+      4,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Eastvale",
+      0,
+      "Fairmont",
+      5,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Ashford",
+      "Ironwood",
+      0,
+      "Ashford",
+      45,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Larkspur",
+      "Carlow",
+      0,
+      "Larkspur",
+      3,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Juniper",
+      0,
+      "Millbrook",
+      21,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Kingsley",
+      "Hartwell",
+      0,
+      "Kingsley",
+      12,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Glenrock",
+      "Northgate",
+      0,
+      "Glenrock",
+      88,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Ashford",
+      0,
+      "Ashford",
+      23,
+      1.2,
+      6,
+      2024
+     ],
+     [
+      "Larkspur",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      17,
+      1.2,
+      6,
+      2024
+     ],
+     [
+      "Dunmore",
+      "Carlow",
+      1,
+      "Dunmore",
+      10,
+      0.8,
+      6,
+      2024
+     ],
+     [
+      "Eastvale",
+      "Glenrock",
+      0,
+      "Eastvale",
+      21,
+      0.8,
+      7,
+      2024
+     ],
+     [
+      "Carlow",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      3,
+      1.2,
+      7,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Bexley",
+      0,
+      "Millbrook",
+      28,
+      0.8,
+      7,
+      2024
+     ]
+    ],
+    "fcs_losses": [
+     [
+      "Eastvale",
+      14,
+      1.2,
+      2,
+      2024
+     ],
+     [
+      "Northgate",
+      12,
+      1.2,
+      4,
+      2024
+     ],
+     [
+      "Juniper",
+      21,
+      0.8,
+      6,
+      2024
+     ]
+    ],
+    "records": {
+     "Ashford": [
+      5,
+      0,
+      0
+     ],
+     "Bexley": [
+      3,
+      3,
+      0
+     ],
+     "Carlow": [
+      3,
+      4,
+      0
+     ],
+     "Dunmore": [
+      4,
+      2,
+      0
+     ],
+     "Eastvale": [
+      1,
+      3,
+      0
+     ],
+     "Fairmont": [
+      2,
+      2,
+      0
+     ],
+     "Glenrock": [
+      2,
+      3,
+      0
+     ],
+     "Hartwell": [
+      2,
+      1,
+      0
+     ],
+     "Ironwood": [
+      2,
+      3,
+      0
+     ],
+     "Juniper": [
+      1,
+      5,
+      0
+     ],
+     "Kingsley": [
+      4,
+      0,
+      0
+     ],
+     "Larkspur": [
+      2,
+      1,
+      0
+     ],
+     "Millbrook": [
+      5,
+      1,
+      0
+     ],
+     "Northgate": [
+      0,
+      5,
+      0
+     ],
+     "Oakhurst": [
+      5,
+      0,
+      0
+     ]
+    },
+    "connectivity": 1.0
+   },
+   "lambda": 0,
+   "non_unique_teams": [
+    "Ashford",
+    "Kingsley",
+    "Oakhurst"
+   ]
+  },
+  "w10": {
+   "year": 2024,
+   "week": 10,
+   "ratings": {
+    "Ashford": 36.64712822423449,
+    "Oakhurst": 35.05855185805138,
+    "fcs": 15.000036316457638,
+    "Millbrook": 12.478410566022472,
+    "Ironwood": 7.701045945511113,
+    "Larkspur": 5.944079639538618,
+    "Kingsley": 5.539802824492246,
+    "Fairmont": 2.550901406227185,
+    "Dunmore": 1.8530595260793474,
+    "Glenrock": 0.32180747291247647,
+    "Bexley": 0.010000023773301232,
+    "Carlow": 0.01000001186312437,
+    "Northgate": 0.010000007085821884,
+    "Hartwell": 0.009999950840493429,
+    "Eastvale": 0.00998171050439825,
+    "Juniper": 0.00998136826522586
+   },
+   "records": {
+    "Ashford": [
+     6,
+     0,
+     0
+    ],
+    "Bexley": [
+     3,
+     4,
+     0
+    ],
+    "Carlow": [
+     3,
+     4,
+     0
+    ],
+    "Dunmore": [
+     4,
+     4,
+     0
+    ],
+    "Eastvale": [
+     2,
+     3,
+     0
+    ],
+    "Fairmont": [
+     2,
+     2,
+     0
+    ],
+    "Glenrock": [
+     3,
+     3,
+     0
+    ],
+    "Hartwell": [
+     2,
+     2,
+     0
+    ],
+    "Ironwood": [
+     3,
+     3,
+     0
+    ],
+    "Juniper": [
+     1,
+     6,
+     0
+    ],
+    "Kingsley": [
+     5,
+     1,
+     0
+    ],
+    "Larkspur": [
+     3,
+     2,
+     0
+    ],
+    "Millbrook": [
+     6,
+     2,
+     0
+    ],
+    "Northgate": [
+     0,
+     5,
+     0
+    ],
+    "Oakhurst": [
+     5,
+     0,
+     0
+    ]
+   },
+   "main": {
+    "objective": 314.9427157394165,
+    "terms": {
+     "margin": 263.9392161802104,
+     "loss_rate": 16.787743043257358,
+     "fcs_loss": 34.21575651594865,
+     "prior": 0.0
+    },
+    "r_fcs": 15.000036316457638,
+    "solver": "OSQP"
+   },
+   "assembled": {
+    "teams": [
+     "Ashford",
+     "Bexley",
+     "Carlow",
+     "Dunmore",
+     "Eastvale",
+     "Fairmont",
+     "Glenrock",
+     "Hartwell",
+     "Ironwood",
+     "Juniper",
+     "Kingsley",
+     "Larkspur",
+     "Millbrook",
+     "Northgate",
+     "Oakhurst"
+    ],
+    "games": [
+     [
+      "Bexley",
+      "Ashford",
+      0,
+      "Ashford",
+      12,
+      1.2,
+      1,
+      2024
+     ],
+     [
+      "Ironwood",
+      "Dunmore",
+      0,
+      "Ironwood",
+      14,
+      0.8,
+      1,
+      2024
+     ],
+     [
+      "Northgate",
+      "Juniper",
+      0,
+      "Juniper",
+      21,
+      1.2,
+      1,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Carlow",
+      0,
+      "Millbrook",
+      7,
+      0.8,
+      1,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      9,
+      1.2,
+      2,
+      2024
+     ],
+     [
+      "Kingsley",
+      "Glenrock",
+      0,
+      "Kingsley",
+      31,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Juniper",
+      "Ironwood",
+      0,
+      "Ironwood",
+      24,
+      1.2,
+      2,
+      2024
+     ],
+     [
+      "Ashford",
+      "Northgate",
+      0,
+      "Ashford",
+      62,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Carlow",
+      "Dunmore",
+      0,
+      "Carlow",
+      7,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Juniper",
+      0,
+      "Fairmont",
+      22,
+      0.8,
+      3,
+      2024
+     ],
+     [
+      "Northgate",
+      "Kingsley",
+      0,
+      "Kingsley",
+      48,
+      1.2,
+      3,
+      2024
+     ],
+     [
+      "Ironwood",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      20,
+      1.2,
+      3,
+      2024
+     ],
+     [
+      "Dunmore",
+      "Bexley",
+      0,
+      "Dunmore",
+      22,
+      0.8,
+      3,
+      2024
+     ],
+     [
+      "Juniper",
+      "Dunmore",
+      0,
+      "Dunmore",
+      31,
+      1.2,
+      4,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Eastvale",
+      0,
+      "Millbrook",
+      10,
+      0.8,
+      4,
+      2024
+     ],
+     [
+      "Glenrock",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      25,
+      1.2,
+      4,
+      2024
+     ],
+     [
+      "Bexley",
+      "Fairmont",
+      0,
+      "Bexley",
+      7,
+      0.8,
+      4,
+      2024
+     ],
+     [
+      "Hartwell",
+      "Ironwood",
+      0,
+      "Hartwell",
+      1,
+      1.0,
+      4,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Eastvale",
+      0,
+      "Fairmont",
+      5,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Ashford",
+      "Ironwood",
+      0,
+      "Ashford",
+      45,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Larkspur",
+      "Carlow",
+      0,
+      "Larkspur",
+      3,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Juniper",
+      0,
+      "Millbrook",
+      21,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Kingsley",
+      "Hartwell",
+      0,
+      "Kingsley",
+      12,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Glenrock",
+      "Northgate",
+      0,
+      "Glenrock",
+      88,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Ashford",
+      0,
+      "Ashford",
+      23,
+      1.2,
+      6,
+      2024
+     ],
+     [
+      "Larkspur",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      17,
+      1.2,
+      6,
+      2024
+     ],
+     [
+      "Dunmore",
+      "Carlow",
+      1,
+      "Dunmore",
+      10,
+      0.8,
+      6,
+      2024
+     ],
+     [
+      "Eastvale",
+      "Glenrock",
+      0,
+      "Eastvale",
+      21,
+      0.8,
+      7,
+      2024
+     ],
+     [
+      "Carlow",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      3,
+      1.2,
+      7,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Bexley",
+      0,
+      "Millbrook",
+      28,
+      0.8,
+      7,
+      2024
+     ],
+     [
+      "Ironwood",
+      "Bexley",
+      0,
+      "Ironwood",
+      22,
+      0.8,
+      8,
+      2024
+     ],
+     [
+      "Hartwell",
+      "Larkspur",
+      0,
+      "Larkspur",
+      7,
+      1.0,
+      8,
+      2024
+     ],
+     [
+      "Ashford",
+      "Dunmore",
+      0,
+      "Ashford",
+      32,
+      0.8,
+      8,
+      2024
+     ],
+     [
+      "Glenrock",
+      "Juniper",
+      0,
+      "Glenrock",
+      4,
+      0.8,
+      8,
+      2024
+     ],
+     [
+      "Kingsley",
+      "Millbrook",
+      0,
+      "Kingsley",
+      2,
+      0.8,
+      8,
+      2024
+     ],
+     [
+      "Eastvale",
+      "Dunmore",
+      0,
+      "Eastvale",
+      8,
+      0.8,
+      9,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Larkspur",
+      0,
+      "Millbrook",
+      17,
+      0.8,
+      10,
+      2024
+     ]
+    ],
+    "fcs_losses": [
+     [
+      "Eastvale",
+      14,
+      1.2,
+      2,
+      2024
+     ],
+     [
+      "Northgate",
+      12,
+      1.2,
+      4,
+      2024
+     ],
+     [
+      "Juniper",
+      21,
+      0.8,
+      6,
+      2024
+     ],
+     [
+      "Kingsley",
+      10,
+      1.0,
+      9,
+      2024
+     ]
+    ],
+    "records": {
+     "Ashford": [
+      6,
+      0,
+      0
+     ],
+     "Bexley": [
+      3,
+      4,
+      0
+     ],
+     "Carlow": [
+      3,
+      4,
+      0
+     ],
+     "Dunmore": [
+      4,
+      4,
+      0
+     ],
+     "Eastvale": [
+      2,
+      3,
+      0
+     ],
+     "Fairmont": [
+      2,
+      2,
+      0
+     ],
+     "Glenrock": [
+      3,
+      3,
+      0
+     ],
+     "Hartwell": [
+      2,
+      2,
+      0
+     ],
+     "Ironwood": [
+      3,
+      3,
+      0
+     ],
+     "Juniper": [
+      1,
+      6,
+      0
+     ],
+     "Kingsley": [
+      5,
+      1,
+      0
+     ],
+     "Larkspur": [
+      3,
+      2,
+      0
+     ],
+     "Millbrook": [
+      6,
+      2,
+      0
+     ],
+     "Northgate": [
+      0,
+      5,
+      0
+     ],
+     "Oakhurst": [
+      5,
+      0,
+      0
+     ]
+    },
+    "connectivity": 1.0
+   },
+   "lambda": 0,
+   "non_unique_teams": [
+    "Ashford",
+    "Oakhurst"
+   ]
+  },
+  "w15": {
+   "year": 2024,
+   "week": 15,
+   "ratings": {
+    "Ashford": 20.65034813101306,
+    "Oakhurst": 20.36664212988272,
+    "fcs": 15.0,
+    "Millbrook": 13.4100183510079,
+    "Larkspur": 10.313640435303038,
+    "Kingsley": 6.102639898586978,
+    "Carlow": 5.650127076079921,
+    "Dunmore": 5.1503616985761225,
+    "Ironwood": 3.385845277932127,
+    "Bexley": 0.01,
+    "Northgate": 0.01,
+    "Fairmont": 0.01,
+    "Glenrock": 0.01,
+    "Hartwell": 0.01,
+    "Juniper": 0.009999999999999998,
+    "Eastvale": 0.009999999999999998
+   },
+   "records": {
+    "Ashford": [
+     8,
+     1,
+     0
+    ],
+    "Bexley": [
+     3,
+     6,
+     0
+    ],
+    "Carlow": [
+     5,
+     5,
+     0
+    ],
+    "Dunmore": [
+     5,
+     4,
+     0
+    ],
+    "Eastvale": [
+     3,
+     3,
+     0
+    ],
+    "Fairmont": [
+     2,
+     3,
+     0
+    ],
+    "Glenrock": [
+     3,
+     4,
+     0
+    ],
+    "Hartwell": [
+     2,
+     4,
+     0
+    ],
+    "Ironwood": [
+     3,
+     4,
+     0
+    ],
+    "Juniper": [
+     1,
+     7,
+     0
+    ],
+    "Kingsley": [
+     7,
+     1,
+     0
+    ],
+    "Larkspur": [
+     5,
+     2,
+     0
+    ],
+    "Millbrook": [
+     7,
+     2,
+     0
+    ],
+    "Northgate": [
+     0,
+     8,
+     0
+    ],
+    "Oakhurst": [
+     7,
+     1,
+     0
+    ]
+   },
+   "main": {
+    "objective": 544.189845963728,
+    "terms": {
+     "margin": 481.9217615259105,
+     "loss_rate": 23.42801070803779,
+     "fcs_loss": 38.8400737297796,
+     "prior": 0.0
+    },
+    "r_fcs": 15.0,
+    "solver": "OSQP"
+   },
+   "assembled": {
+    "teams": [
+     "Ashford",
+     "Bexley",
+     "Carlow",
+     "Dunmore",
+     "Eastvale",
+     "Fairmont",
+     "Glenrock",
+     "Hartwell",
+     "Ironwood",
+     "Juniper",
+     "Kingsley",
+     "Larkspur",
+     "Millbrook",
+     "Northgate",
+     "Oakhurst"
+    ],
+    "games": [
+     [
+      "Bexley",
+      "Ashford",
+      0,
+      "Ashford",
+      12,
+      1.2,
+      1,
+      2024
+     ],
+     [
+      "Ironwood",
+      "Dunmore",
+      0,
+      "Ironwood",
+      14,
+      0.8,
+      1,
+      2024
+     ],
+     [
+      "Northgate",
+      "Juniper",
+      0,
+      "Juniper",
+      21,
+      1.2,
+      1,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Carlow",
+      0,
+      "Millbrook",
+      7,
+      0.8,
+      1,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      9,
+      1.2,
+      2,
+      2024
+     ],
+     [
+      "Kingsley",
+      "Glenrock",
+      0,
+      "Kingsley",
+      31,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Juniper",
+      "Ironwood",
+      0,
+      "Ironwood",
+      24,
+      1.2,
+      2,
+      2024
+     ],
+     [
+      "Ashford",
+      "Northgate",
+      0,
+      "Ashford",
+      62,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Carlow",
+      "Dunmore",
+      0,
+      "Carlow",
+      7,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Juniper",
+      0,
+      "Fairmont",
+      22,
+      0.8,
+      3,
+      2024
+     ],
+     [
+      "Northgate",
+      "Kingsley",
+      0,
+      "Kingsley",
+      48,
+      1.2,
+      3,
+      2024
+     ],
+     [
+      "Ironwood",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      20,
+      1.2,
+      3,
+      2024
+     ],
+     [
+      "Dunmore",
+      "Bexley",
+      0,
+      "Dunmore",
+      22,
+      0.8,
+      3,
+      2024
+     ],
+     [
+      "Juniper",
+      "Dunmore",
+      0,
+      "Dunmore",
+      31,
+      1.2,
+      4,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Eastvale",
+      0,
+      "Millbrook",
+      10,
+      0.8,
+      4,
+      2024
+     ],
+     [
+      "Glenrock",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      25,
+      1.2,
+      4,
+      2024
+     ],
+     [
+      "Bexley",
+      "Fairmont",
+      0,
+      "Bexley",
+      7,
+      0.8,
+      4,
+      2024
+     ],
+     [
+      "Hartwell",
+      "Ironwood",
+      0,
+      "Hartwell",
+      1,
+      1.0,
+      4,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Eastvale",
+      0,
+      "Fairmont",
+      5,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Ashford",
+      "Ironwood",
+      0,
+      "Ashford",
+      45,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Larkspur",
+      "Carlow",
+      0,
+      "Larkspur",
+      3,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Juniper",
+      0,
+      "Millbrook",
+      21,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Kingsley",
+      "Hartwell",
+      0,
+      "Kingsley",
+      12,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Glenrock",
+      "Northgate",
+      0,
+      "Glenrock",
+      88,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Ashford",
+      0,
+      "Ashford",
+      23,
+      1.2,
+      6,
+      2024
+     ],
+     [
+      "Larkspur",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      17,
+      1.2,
+      6,
+      2024
+     ],
+     [
+      "Dunmore",
+      "Carlow",
+      1,
+      "Dunmore",
+      10,
+      0.8,
+      6,
+      2024
+     ],
+     [
+      "Eastvale",
+      "Glenrock",
+      0,
+      "Eastvale",
+      21,
+      0.8,
+      7,
+      2024
+     ],
+     [
+      "Carlow",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      3,
+      1.2,
+      7,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Bexley",
+      0,
+      "Millbrook",
+      28,
+      0.8,
+      7,
+      2024
+     ],
+     [
+      "Ironwood",
+      "Bexley",
+      0,
+      "Ironwood",
+      22,
+      0.8,
+      8,
+      2024
+     ],
+     [
+      "Hartwell",
+      "Larkspur",
+      0,
+      "Larkspur",
+      7,
+      1.0,
+      8,
+      2024
+     ],
+     [
+      "Ashford",
+      "Dunmore",
+      0,
+      "Ashford",
+      32,
+      0.8,
+      8,
+      2024
+     ],
+     [
+      "Glenrock",
+      "Juniper",
+      0,
+      "Glenrock",
+      4,
+      0.8,
+      8,
+      2024
+     ],
+     [
+      "Kingsley",
+      "Millbrook",
+      0,
+      "Kingsley",
+      2,
+      0.8,
+      8,
+      2024
+     ],
+     [
+      "Eastvale",
+      "Dunmore",
+      0,
+      "Eastvale",
+      8,
+      0.8,
+      9,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Larkspur",
+      0,
+      "Millbrook",
+      17,
+      0.8,
+      10,
+      2024
+     ],
+     [
+      "Northgate",
+      "Dunmore",
+      0,
+      "Dunmore",
+      23,
+      1.2,
+      11,
+      2024
+     ],
+     [
+      "Kingsley",
+      "Oakhurst",
+      0,
+      "Kingsley",
+      8,
+      0.8,
+      11,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Carlow",
+      0,
+      "Carlow",
+      22,
+      1.2,
+      11,
+      2024
+     ],
+     [
+      "Bexley",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      13,
+      1.2,
+      12,
+      2024
+     ],
+     [
+      "Glenrock",
+      "Larkspur",
+      0,
+      "Larkspur",
+      8,
+      1.2,
+      12,
+      2024
+     ],
+     [
+      "Kingsley",
+      "Ashford",
+      0,
+      "Kingsley",
+      4,
+      0.8,
+      12,
+      2024
+     ],
+     [
+      "Oakhurst",
+      "Juniper",
+      0,
+      "Oakhurst",
+      29,
+      0.8,
+      13,
+      2024
+     ],
+     [
+      "Ironwood",
+      "Carlow",
+      0,
+      "Carlow",
+      14,
+      1.2,
+      13,
+      2024
+     ],
+     [
+      "Northgate",
+      "Millbrook",
+      0,
+      "Millbrook",
+      23,
+      1.2,
+      13,
+      2024
+     ],
+     [
+      "Eastvale",
+      "Bexley",
+      0,
+      "Eastvale",
+      15,
+      0.8,
+      13,
+      2024
+     ],
+     [
+      "Larkspur",
+      "Northgate",
+      0,
+      "Larkspur",
+      45,
+      0.8,
+      14,
+      2024
+     ],
+     [
+      "Carlow",
+      "Ashford",
+      0,
+      "Ashford",
+      24,
+      1.2,
+      14,
+      2024
+     ],
+     [
+      "Ashford",
+      "Hartwell",
+      0,
+      "Ashford",
+      18,
+      1.0,
+      15,
+      2024
+     ]
+    ],
+    "fcs_losses": [
+     [
+      "Eastvale",
+      14,
+      1.2,
+      2,
+      2024
+     ],
+     [
+      "Northgate",
+      12,
+      1.2,
+      4,
+      2024
+     ],
+     [
+      "Juniper",
+      21,
+      0.8,
+      6,
+      2024
+     ],
+     [
+      "Kingsley",
+      10,
+      1.0,
+      9,
+      2024
+     ],
+     [
+      "Hartwell",
+      3,
+      0.8,
+      11,
+      2024
+     ]
+    ],
+    "records": {
+     "Ashford": [
+      8,
+      1,
+      0
+     ],
+     "Bexley": [
+      3,
+      6,
+      0
+     ],
+     "Carlow": [
+      5,
+      5,
+      0
+     ],
+     "Dunmore": [
+      5,
+      4,
+      0
+     ],
+     "Eastvale": [
+      3,
+      3,
+      0
+     ],
+     "Fairmont": [
+      2,
+      3,
+      0
+     ],
+     "Glenrock": [
+      3,
+      4,
+      0
+     ],
+     "Hartwell": [
+      2,
+      4,
+      0
+     ],
+     "Ironwood": [
+      3,
+      4,
+      0
+     ],
+     "Juniper": [
+      1,
+      7,
+      0
+     ],
+     "Kingsley": [
+      7,
+      1,
+      0
+     ],
+     "Larkspur": [
+      5,
+      2,
+      0
+     ],
+     "Millbrook": [
+      7,
+      2,
+      0
+     ],
+     "Northgate": [
+      0,
+      8,
+      0
+     ],
+     "Oakhurst": [
+      7,
+      1,
+      0
+     ]
+    },
+    "connectivity": 1.0
+   },
+   "lambda": 0,
+   "non_unique_teams": []
+  }
+ },
+ "quirks": {
+  "week_none": {
+   "raised": "TypeError",
+   "message": "'<' not supported between instances of 'NoneType' and 'int'"
+  },
+  "no_prior_season_data": {
+   "raised": "ValueError",
+   "message": "max() iterable argument is empty"
+  },
+  "week_zero": {
+   "raised": null,
+   "ratings": {
+    "Ashford": 20.514769625736797,
+    "Oakhurst": 19.786499137216392,
+    "fcs": 15.0,
+    "Millbrook": 13.191523967461773,
+    "Larkspur": 9.912673243021388,
+    "Kingsley": 6.08239902077109,
+    "Carlow": 5.556904698258927,
+    "Dunmore": 5.029479506220208,
+    "Ironwood": 3.5059272620255357,
+    "Bexley": 0.01,
+    "Northgate": 0.01,
+    "Fairmont": 0.01,
+    "Glenrock": 0.01,
+    "Hartwell": 0.01,
+    "Juniper": 0.009999999999999998,
+    "Eastvale": 0.009999999999999998
+   },
+   "records": {
+    "Ashford": [
+     8,
+     1,
+     0
+    ],
+    "Bexley": [
+     3,
+     6,
+     0
+    ],
+    "Carlow": [
+     5,
+     5,
+     0
+    ],
+    "Dunmore": [
+     5,
+     4,
+     0
+    ],
+    "Eastvale": [
+     3,
+     3,
+     0
+    ],
+    "Fairmont": [
+     2,
+     3,
+     0
+    ],
+    "Glenrock": [
+     3,
+     4,
+     0
+    ],
+    "Hartwell": [
+     2,
+     4,
+     0
+    ],
+    "Ironwood": [
+     3,
+     4,
+     0
+    ],
+    "Juniper": [
+     1,
+     7,
+     0
+    ],
+    "Kingsley": [
+     7,
+     1,
+     0
+    ],
+    "Larkspur": [
+     5,
+     2,
+     0
+    ],
+    "Millbrook": [
+     7,
+     2,
+     0
+    ],
+    "Northgate": [
+     0,
+     8,
+     0
+    ],
+    "Oakhurst": [
+     7,
+     1,
+     0
+    ]
+   },
+   "week": 0,
+   "objective": 560.7243882511522,
+   "terms": {
+    "margin": 483.1300496572057,
+    "loss_rate": 22.618091059622017,
+    "fcs_loss": 38.618938200831174,
+    "prior": 16.35730933349344
+   },
+   "r_fcs": 15.0,
+   "solver": "OSQP"
+  },
+  "tie_game": {
+   "extra_game": {
+    "season": 2024,
+    "week": 8,
+    "season_type": "regular",
+    "home_team": "Ashford",
+    "home_score": 17,
+    "away_team": "Eastvale",
+    "away_score": 17,
+    "neutral_site": false,
+    "id": 9001
+   },
+   "year": 2024,
+   "week": 10,
+   "ratings": {
+    "Oakhurst": 34.893739222362555,
+    "Ashford": 19.336212303857423,
+    "fcs": 15.00004606582513,
+    "Millbrook": 10.16127199012386,
+    "Ironwood": 7.109793297620229,
+    "Kingsley": 5.517558741604591,
+    "Larkspur": 5.4403537955590595,
+    "Fairmont": 2.5508996650812508,
+    "Dunmore": 1.7835003548793265,
+    "Glenrock": 0.3183838224082194,
+    "Bexley": 0.010000058933042209,
+    "Carlow": 0.01000001748348516,
+    "Northgate": 0.00999999557187221,
+    "Hartwell": 0.00999993734778541,
+    "Eastvale": 0.009976871314912905,
+    "Juniper": 0.009976359827640717
+   },
+   "records": {
+    "Ashford": [
+     6,
+     1,
+     0
+    ],
+    "Bexley": [
+     3,
+     4,
+     0
+    ],
+    "Carlow": [
+     3,
+     4,
+     0
+    ],
+    "Dunmore": [
+     4,
+     4,
+     0
+    ],
+    "Eastvale": [
+     3,
+     3,
+     0
+    ],
+    "Fairmont": [
+     2,
+     2,
+     0
+    ],
+    "Glenrock": [
+     3,
+     3,
+     0
+    ],
+    "Hartwell": [
+     2,
+     2,
+     0
+    ],
+    "Ironwood": [
+     3,
+     3,
+     0
+    ],
+    "Juniper": [
+     1,
+     6,
+     0
+    ],
+    "Kingsley": [
+     5,
+     1,
+     0
+    ],
+    "Larkspur": [
+     3,
+     2,
+     0
+    ],
+    "Millbrook": [
+     6,
+     2,
+     0
+    ],
+    "Northgate": [
+     0,
+     5,
+     0
+    ],
+    "Oakhurst": [
+     5,
+     0,
+     0
+    ]
+   },
+   "assembled": {
+    "teams": [
+     "Ashford",
+     "Bexley",
+     "Carlow",
+     "Dunmore",
+     "Eastvale",
+     "Fairmont",
+     "Glenrock",
+     "Hartwell",
+     "Ironwood",
+     "Juniper",
+     "Kingsley",
+     "Larkspur",
+     "Millbrook",
+     "Northgate",
+     "Oakhurst"
+    ],
+    "games": [
+     [
+      "Bexley",
+      "Ashford",
+      0,
+      "Ashford",
+      12,
+      1.2,
+      1,
+      2024
+     ],
+     [
+      "Ironwood",
+      "Dunmore",
+      0,
+      "Ironwood",
+      14,
+      0.8,
+      1,
+      2024
+     ],
+     [
+      "Northgate",
+      "Juniper",
+      0,
+      "Juniper",
+      21,
+      1.2,
+      1,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Carlow",
+      0,
+      "Millbrook",
+      7,
+      0.8,
+      1,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      9,
+      1.2,
+      2,
+      2024
+     ],
+     [
+      "Kingsley",
+      "Glenrock",
+      0,
+      "Kingsley",
+      31,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Juniper",
+      "Ironwood",
+      0,
+      "Ironwood",
+      24,
+      1.2,
+      2,
+      2024
+     ],
+     [
+      "Ashford",
+      "Northgate",
+      0,
+      "Ashford",
+      62,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Carlow",
+      "Dunmore",
+      0,
+      "Carlow",
+      7,
+      0.8,
+      2,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Juniper",
+      0,
+      "Fairmont",
+      22,
+      0.8,
+      3,
+      2024
+     ],
+     [
+      "Northgate",
+      "Kingsley",
+      0,
+      "Kingsley",
+      48,
+      1.2,
+      3,
+      2024
+     ],
+     [
+      "Ironwood",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      20,
+      1.2,
+      3,
+      2024
+     ],
+     [
+      "Dunmore",
+      "Bexley",
+      0,
+      "Dunmore",
+      22,
+      0.8,
+      3,
+      2024
+     ],
+     [
+      "Juniper",
+      "Dunmore",
+      0,
+      "Dunmore",
+      31,
+      1.2,
+      4,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Eastvale",
+      0,
+      "Millbrook",
+      10,
+      0.8,
+      4,
+      2024
+     ],
+     [
+      "Glenrock",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      25,
+      1.2,
+      4,
+      2024
+     ],
+     [
+      "Bexley",
+      "Fairmont",
+      0,
+      "Bexley",
+      7,
+      0.8,
+      4,
+      2024
+     ],
+     [
+      "Hartwell",
+      "Ironwood",
+      0,
+      "Hartwell",
+      1,
+      1.0,
+      4,
+      2024
+     ],
+     [
+      "Fairmont",
+      "Eastvale",
+      0,
+      "Fairmont",
+      5,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Ashford",
+      "Ironwood",
+      0,
+      "Ashford",
+      45,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Larkspur",
+      "Carlow",
+      0,
+      "Larkspur",
+      3,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Juniper",
+      0,
+      "Millbrook",
+      21,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Kingsley",
+      "Hartwell",
+      0,
+      "Kingsley",
+      12,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Glenrock",
+      "Northgate",
+      0,
+      "Glenrock",
+      88,
+      0.8,
+      5,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Ashford",
+      0,
+      "Ashford",
+      23,
+      1.2,
+      6,
+      2024
+     ],
+     [
+      "Larkspur",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      17,
+      1.2,
+      6,
+      2024
+     ],
+     [
+      "Dunmore",
+      "Carlow",
+      1,
+      "Dunmore",
+      10,
+      0.8,
+      6,
+      2024
+     ],
+     [
+      "Eastvale",
+      "Glenrock",
+      0,
+      "Eastvale",
+      21,
+      0.8,
+      7,
+      2024
+     ],
+     [
+      "Carlow",
+      "Oakhurst",
+      0,
+      "Oakhurst",
+      3,
+      1.2,
+      7,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Bexley",
+      0,
+      "Millbrook",
+      28,
+      0.8,
+      7,
+      2024
+     ],
+     [
+      "Ironwood",
+      "Bexley",
+      0,
+      "Ironwood",
+      22,
+      0.8,
+      8,
+      2024
+     ],
+     [
+      "Hartwell",
+      "Larkspur",
+      0,
+      "Larkspur",
+      7,
+      1.0,
+      8,
+      2024
+     ],
+     [
+      "Ashford",
+      "Dunmore",
+      0,
+      "Ashford",
+      32,
+      0.8,
+      8,
+      2024
+     ],
+     [
+      "Glenrock",
+      "Juniper",
+      0,
+      "Glenrock",
+      4,
+      0.8,
+      8,
+      2024
+     ],
+     [
+      "Kingsley",
+      "Millbrook",
+      0,
+      "Kingsley",
+      2,
+      0.8,
+      8,
+      2024
+     ],
+     [
+      "Eastvale",
+      "Dunmore",
+      0,
+      "Eastvale",
+      8,
+      0.8,
+      9,
+      2024
+     ],
+     [
+      "Millbrook",
+      "Larkspur",
+      0,
+      "Millbrook",
+      17,
+      0.8,
+      10,
+      2024
+     ],
+     [
+      "Ashford",
+      "Eastvale",
+      0,
+      "Eastvale",
+      0,
+      1.2,
+      8,
+      2024
+     ]
+    ],
+    "fcs_losses": [
+     [
+      "Eastvale",
+      14,
+      1.2,
+      2,
+      2024
+     ],
+     [
+      "Northgate",
+      12,
+      1.2,
+      4,
+      2024
+     ],
+     [
+      "Juniper",
+      21,
+      0.8,
+      6,
+      2024
+     ],
+     [
+      "Kingsley",
+      10,
+      1.0,
+      9,
+      2024
+     ]
+    ],
+    "records": {
+     "Ashford": [
+      6,
+      1,
+      0
+     ],
+     "Bexley": [
+      3,
+      4,
+      0
+     ],
+     "Carlow": [
+      3,
+      4,
+      0
+     ],
+     "Dunmore": [
+      4,
+      4,
+      0
+     ],
+     "Eastvale": [
+      3,
+      3,
+      0
+     ],
+     "Fairmont": [
+      2,
+      2,
+      0
+     ],
+     "Glenrock": [
+      3,
+      3,
+      0
+     ],
+     "Hartwell": [
+      2,
+      2,
+      0
+     ],
+     "Ironwood": [
+      3,
+      3,
+      0
+     ],
+     "Juniper": [
+      1,
+      6,
+      0
+     ],
+     "Kingsley": [
+      5,
+      1,
+      0
+     ],
+     "Larkspur": [
+      3,
+      2,
+      0
+     ],
+     "Millbrook": [
+      6,
+      2,
+      0
+     ],
+     "Northgate": [
+      0,
+      5,
+      0
+     ],
+     "Oakhurst": [
+      5,
+      0,
+      0
+     ]
+    }
+   },
+   "objective": 352.0549499763942,
+   "terms": {
+    "margin": 300.58248713523324,
+    "loss_rate": 17.37488004415441,
+    "fcs_loss": 34.097582797006645,
+    "prior": 0.0
+   },
+   "r_fcs": 15.00004606582513,
+   "solver": "OSQP"
+  },
+  "prior_without_fcs_losses": {
+   "dropped_game_ids": [
+    15,
+    35,
+    47
+   ],
+   "raised": "AttributeError",
+   "message": "'int' object has no attribute 'value'"
+  }
+ },
+ "derivation_cases": [
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 0,
+   "away_score": 0,
+   "neutral_site": false,
+   "margin": 0,
+   "winner": null,
+   "alpha": 1.2
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 0,
+   "away_score": 0,
+   "neutral_site": true,
+   "margin": 0,
+   "winner": null,
+   "alpha": 1.0
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 1,
+   "away_score": 0,
+   "neutral_site": false,
+   "margin": 1,
+   "winner": "H",
+   "alpha": 0.8
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 1,
+   "away_score": 0,
+   "neutral_site": true,
+   "margin": 1,
+   "winner": "H",
+   "alpha": 1.0
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 0,
+   "away_score": 1,
+   "neutral_site": false,
+   "margin": 1,
+   "winner": "A",
+   "alpha": 1.2
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 0,
+   "away_score": 1,
+   "neutral_site": true,
+   "margin": 1,
+   "winner": "A",
+   "alpha": 1.0
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 24,
+   "away_score": 24,
+   "neutral_site": false,
+   "margin": 0,
+   "winner": "A",
+   "alpha": 1.2
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 24,
+   "away_score": 24,
+   "neutral_site": true,
+   "margin": 0,
+   "winner": "A",
+   "alpha": 1.0
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 31,
+   "away_score": 17,
+   "neutral_site": false,
+   "margin": 14,
+   "winner": "H",
+   "alpha": 0.8
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 31,
+   "away_score": 17,
+   "neutral_site": true,
+   "margin": 14,
+   "winner": "H",
+   "alpha": 1.0
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 17,
+   "away_score": 31,
+   "neutral_site": false,
+   "margin": 14,
+   "winner": "A",
+   "alpha": 1.2
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 17,
+   "away_score": 31,
+   "neutral_site": true,
+   "margin": 14,
+   "winner": "A",
+   "alpha": 1.0
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 3,
+   "away_score": 0,
+   "neutral_site": false,
+   "margin": 3,
+   "winner": "H",
+   "alpha": 0.8
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 3,
+   "away_score": 0,
+   "neutral_site": true,
+   "margin": 3,
+   "winner": "H",
+   "alpha": 1.0
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 0,
+   "away_score": 3,
+   "neutral_site": false,
+   "margin": 3,
+   "winner": "A",
+   "alpha": 1.2
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 0,
+   "away_score": 3,
+   "neutral_site": true,
+   "margin": 3,
+   "winner": "A",
+   "alpha": 1.0
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 45,
+   "away_score": 44,
+   "neutral_site": false,
+   "margin": 1,
+   "winner": "H",
+   "alpha": 0.8
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 45,
+   "away_score": 44,
+   "neutral_site": true,
+   "margin": 1,
+   "winner": "H",
+   "alpha": 1.0
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 10,
+   "away_score": 70,
+   "neutral_site": false,
+   "margin": 60,
+   "winner": "A",
+   "alpha": 1.2
+  },
+  {
+   "home_team": "H",
+   "away_team": "A",
+   "home_score": 10,
+   "away_score": 70,
+   "neutral_site": true,
+   "margin": 60,
+   "winner": "A",
+   "alpha": 1.0
+  }
+ ],
+ "fixture_derived": {
+  "1": {
+   "winner": "Carlow",
+   "margin": 42,
+   "alpha": 0.8
+  },
+  "2": {
+   "winner": "Hartwell",
+   "margin": 40,
+   "alpha": 0.8
+  },
+  "3": {
+   "winner": "Ironwood",
+   "margin": 23,
+   "alpha": 0.8
+  },
+  "4": {
+   "winner": "Glenrock",
+   "margin": 19,
+   "alpha": 1.2
+  },
+  "5": {
+   "winner": "Fairmont",
+   "margin": 9,
+   "alpha": 1.2
+  },
+  "6": {
+   "winner": "Kingsley",
+   "margin": 17,
+   "alpha": 0.8
+  },
+  "7": {
+   "winner": "Ashford",
+   "margin": 14,
+   "alpha": 1.2
+  },
+  "8": {
+   "winner": "Eastvale",
+   "margin": 19,
+   "alpha": 0.8
+  },
+  "9": {
+   "winner": "Fairmont",
+   "margin": 37,
+   "alpha": 0.8
+  },
+  "10": {
+   "winner": "Redfern",
+   "margin": 23,
+   "alpha": 0.8
+  },
+  "11": {
+   "winner": "Hartwell",
+   "margin": 15,
+   "alpha": 0.8
+  },
+  "12": {
+   "winner": "Glenrock",
+   "margin": 19,
+   "alpha": 1.2
+  },
+  "13": {
+   "winner": "Millbrook",
+   "margin": 11,
+   "alpha": 1.2
+  },
+  "14": {
+   "winner": "Kingsley",
+   "margin": 4,
+   "alpha": 1.2
+  },
+  "15": {
+   "winner": "Alder State",
+   "margin": 4,
+   "alpha": 0.8
+  },
+  "16": {
+   "winner": "Eastvale",
+   "margin": 26,
+   "alpha": 0.8
+  },
+  "17": {
+   "winner": "Redfern",
+   "margin": 32,
+   "alpha": 0.8
+  },
+  "18": {
+   "winner": "Carlow",
+   "margin": 4,
+   "alpha": 1.2
+  },
+  "19": {
+   "winner": "Glenrock",
+   "margin": 6,
+   "alpha": 0.8
+  },
+  "20": {
+   "winner": "Ironwood",
+   "margin": 16,
+   "alpha": 1.0
+  },
+  "21": {
+   "winner": "Larkspur",
+   "margin": 12,
+   "alpha": 0.8
+  },
+  "22": {
+   "winner": "Bexley",
+   "margin": 62,
+   "alpha": 0.8
+  },
+  "23": {
+   "winner": "Glenrock",
+   "margin": 38,
+   "alpha": 0.8
+  },
+  "24": {
+   "winner": "Hartwell",
+   "margin": 4,
+   "alpha": 1.2
+  },
+  "25": {
+   "winner": "Ashford",
+   "margin": 16,
+   "alpha": 1.2
+  },
+  "26": {
+   "winner": "Fairmont",
+   "margin": 22,
+   "alpha": 0.8
+  },
+  "27": {
+   "winner": "Eastvale",
+   "margin": 3,
+   "alpha": 1.0
+  },
+  "28": {
+   "winner": "Northgate",
+   "margin": 5,
+   "alpha": 1.2
+  },
+  "29": {
+   "winner": "Dunmore",
+   "margin": 21,
+   "alpha": 1.2
+  },
+  "30": {
+   "winner": "Glenrock",
+   "margin": 25,
+   "alpha": 0.8
+  },
+  "31": {
+   "winner": "Fairmont",
+   "margin": 8,
+   "alpha": 0.8
+  },
+  "32": {
+   "winner": "Millbrook",
+   "margin": 11,
+   "alpha": 1.2
+  },
+  "33": {
+   "winner": "Ashford",
+   "margin": 27,
+   "alpha": 0.8
+  },
+  "34": {
+   "winner": "Hartwell",
+   "margin": 3,
+   "alpha": 0.8
+  },
+  "35": {
+   "winner": "Birch College",
+   "margin": 10,
+   "alpha": 1.2
+  },
+  "36": {
+   "winner": "Bexley",
+   "margin": 13,
+   "alpha": 0.8
+  },
+  "37": {
+   "winner": "Juniper",
+   "margin": 3,
+   "alpha": 0.8
+  },
+  "38": {
+   "winner": "Hartwell",
+   "margin": 21,
+   "alpha": 0.8
+  },
+  "39": {
+   "winner": "Eastvale",
+   "margin": 4,
+   "alpha": 1.2
+  },
+  "40": {
+   "winner": "Ashford",
+   "margin": 8,
+   "alpha": 0.8
+  },
+  "41": {
+   "winner": "Eastvale",
+   "margin": 19,
+   "alpha": 0.8
+  },
+  "42": {
+   "winner": "Millbrook",
+   "margin": 4,
+   "alpha": 0.8
+  },
+  "43": {
+   "winner": "Hartwell",
+   "margin": 6,
+   "alpha": 1.2
+  },
+  "44": {
+   "winner": "Redfern",
+   "margin": 11,
+   "alpha": 0.8
+  },
+  "45": {
+   "winner": "Larkspur",
+   "margin": 18,
+   "alpha": 1.2
+  },
+  "46": {
+   "winner": "Ashford",
+   "margin": 40,
+   "alpha": 1.0
+  },
+  "47": {
+   "winner": "Oakhurst",
+   "margin": 11,
+   "alpha": 1.0
+  },
+  "48": {
+   "winner": "Ironwood",
+   "margin": 13,
+   "alpha": 0.8
+  },
+  "49": {
+   "winner": "Eastvale",
+   "margin": 23,
+   "alpha": 1.2
+  },
+  "50": {
+   "winner": "Redfern",
+   "margin": 39,
+   "alpha": 0.8
+  },
+  "51": {
+   "winner": "Bexley",
+   "margin": 20,
+   "alpha": 0.8
+  },
+  "52": {
+   "winner": "Glenrock",
+   "margin": 8,
+   "alpha": 0.8
+  },
+  "53": {
+   "winner": "Ironwood",
+   "margin": 20,
+   "alpha": 0.8
+  },
+  "54": {
+   "winner": "Carlow",
+   "margin": 29,
+   "alpha": 1.0
+  },
+  "55": {
+   "winner": "Ashford",
+   "margin": 31,
+   "alpha": 0.8
+  },
+  "56": {
+   "winner": "Bexley",
+   "margin": 1,
+   "alpha": 1.2
+  },
+  "57": {
+   "winner": "Glenrock",
+   "margin": 7,
+   "alpha": 0.8
+  },
+  "58": {
+   "winner": "Dunmore",
+   "margin": 7,
+   "alpha": 0.8
+  },
+  "59": {
+   "winner": "Fairmont",
+   "margin": 6,
+   "alpha": 1.0
+  },
+  "60": {
+   "winner": "Eastvale",
+   "margin": 31,
+   "alpha": 1.2
+  },
+  "61": {
+   "winner": "Dunmore",
+   "margin": 23,
+   "alpha": 0.8
+  },
+  "62": {
+   "winner": "Glenrock",
+   "margin": 4,
+   "alpha": 1.2
+  },
+  "63": {
+   "winner": "Carlow",
+   "margin": 11,
+   "alpha": 1.2
+  },
+  "64": {
+   "winner": "Kingsley",
+   "margin": 4,
+   "alpha": 1.0
+  },
+  "65": {
+   "winner": "Ironwood",
+   "margin": 24,
+   "alpha": 1.2
+  },
+  "66": {
+   "winner": "Carlow",
+   "margin": 3,
+   "alpha": 1.0
+  },
+  "67": {
+   "winner": "Kingsley",
+   "margin": 60,
+   "alpha": 0.8
+  },
+  "68": {
+   "winner": "Hartwell",
+   "margin": 40,
+   "alpha": 0.8
+  },
+  "69": {
+   "winner": "Ashford",
+   "margin": 12,
+   "alpha": 1.2
+  },
+  "70": {
+   "winner": "Ironwood",
+   "margin": 14,
+   "alpha": 0.8
+  },
+  "71": {
+   "winner": "Juniper",
+   "margin": 21,
+   "alpha": 1.2
+  },
+  "72": {
+   "winner": "Millbrook",
+   "margin": 7,
+   "alpha": 0.8
+  },
+  "73": {
+   "winner": "Bexley",
+   "margin": 29,
+   "alpha": 0.8
+  },
+  "74": {
+   "winner": "Millbrook",
+   "margin": 58,
+   "alpha": 0.8
+  },
+  "75": {
+   "winner": "Oakhurst",
+   "margin": 9,
+   "alpha": 1.2
+  },
+  "76": {
+   "winner": "Kingsley",
+   "margin": 31,
+   "alpha": 0.8
+  },
+  "77": {
+   "winner": "Ironwood",
+   "margin": 24,
+   "alpha": 1.2
+  },
+  "78": {
+   "winner": "Ashford",
+   "margin": 62,
+   "alpha": 0.8
+  },
+  "79": {
+   "winner": "Alder State",
+   "margin": 14,
+   "alpha": 1.2
+  },
+  "80": {
+   "winner": "Carlow",
+   "margin": 7,
+   "alpha": 0.8
+  },
+  "81": {
+   "winner": "Glenrock",
+   "margin": 36,
+   "alpha": 0.8
+  },
+  "82": {
+   "winner": "Carlow",
+   "margin": 39,
+   "alpha": 0.8
+  },
+  "83": {
+   "winner": "Fairmont",
+   "margin": 22,
+   "alpha": 0.8
+  },
+  "84": {
+   "winner": "Kingsley",
+   "margin": 48,
+   "alpha": 1.2
+  },
+  "85": {
+   "winner": "Oakhurst",
+   "margin": 20,
+   "alpha": 1.2
+  },
+  "86": {
+   "winner": "Dunmore",
+   "margin": 22,
+   "alpha": 0.8
+  },
+  "87": {
+   "winner": "Ashford",
+   "margin": 49,
+   "alpha": 0.8
+  },
+  "88": {
+   "winner": null,
+   "margin": 0,
+   "alpha": 1.2
+  },
+  "89": {
+   "winner": "Larkspur",
+   "margin": 38,
+   "alpha": 0.8
+  },
+  "90": {
+   "winner": "Carlow",
+   "margin": 27,
+   "alpha": 1.2
+  },
+  "91": {
+   "winner": "Dunmore",
+   "margin": 31,
+   "alpha": 1.2
+  },
+  "92": {
+   "winner": "Millbrook",
+   "margin": 10,
+   "alpha": 0.8
+  },
+  "93": {
+   "winner": "Oakhurst",
+   "margin": 25,
+   "alpha": 1.2
+  },
+  "94": {
+   "winner": "Bexley",
+   "margin": 7,
+   "alpha": 0.8
+  },
+  "95": {
+   "winner": "Dogwood A&M",
+   "margin": 12,
+   "alpha": 1.2
+  },
+  "96": {
+   "winner": "Hartwell",
+   "margin": 1,
+   "alpha": 1.0
+  },
+  "97": {
+   "winner": "Bexley",
+   "margin": 10,
+   "alpha": 1.2
+  },
+  "98": {
+   "winner": "Dunmore",
+   "margin": 34,
+   "alpha": 0.8
+  },
+  "99": {
+   "winner": "Fairmont",
+   "margin": 5,
+   "alpha": 0.8
+  },
+  "100": {
+   "winner": "Ashford",
+   "margin": 45,
+   "alpha": 0.8
+  },
+  "101": {
+   "winner": "Larkspur",
+   "margin": 3,
+   "alpha": 0.8
+  },
+  "102": {
+   "winner": "Millbrook",
+   "margin": 21,
+   "alpha": 0.8
+  },
+  "103": {
+   "winner": "Kingsley",
+   "margin": 12,
+   "alpha": 0.8
+  },
+  "104": {
+   "winner": "Glenrock",
+   "margin": 88,
+   "alpha": 0.8
+  },
+  "105": {
+   "winner": "Ashford",
+   "margin": 23,
+   "alpha": 1.2
+  },
+  "106": {
+   "winner": "Oakhurst",
+   "margin": 17,
+   "alpha": 1.2
+  },
+  "107": {
+   "winner": "Birch College",
+   "margin": 21,
+   "alpha": 0.8
+  },
+  "108": {
+   "winner": "Dunmore",
+   "margin": 10,
+   "alpha": 0.8
+  },
+  "109": {
+   "winner": "Eastvale",
+   "margin": 21,
+   "alpha": 0.8
+  },
+  "110": {
+   "winner": "Oakhurst",
+   "margin": 3,
+   "alpha": 1.2
+  },
+  "111": {
+   "winner": "Millbrook",
+   "margin": 28,
+   "alpha": 0.8
+  },
+  "112": {
+   "winner": null,
+   "margin": 0,
+   "alpha": 1.2
+  },
+  "113": {
+   "winner": "Ironwood",
+   "margin": 22,
+   "alpha": 0.8
+  },
+  "114": {
+   "winner": "Larkspur",
+   "margin": 7,
+   "alpha": 1.0
+  },
+  "115": {
+   "winner": "Ashford",
+   "margin": 32,
+   "alpha": 0.8
+  },
+  "116": {
+   "winner": "Glenrock",
+   "margin": 4,
+   "alpha": 0.8
+  },
+  "117": {
+   "winner": "Kingsley",
+   "margin": 2,
+   "alpha": 0.8
+  },
+  "118": {
+   "winner": "Eastvale",
+   "margin": 8,
+   "alpha": 0.8
+  },
+  "119": {
+   "winner": "Cedar Tech",
+   "margin": 10,
+   "alpha": 1.0
+  },
+  "120": {
+   "winner": "Millbrook",
+   "margin": 17,
+   "alpha": 0.8
+  },
+  "121": {
+   "winner": "Dunmore",
+   "margin": 23,
+   "alpha": 1.2
+  },
+  "122": {
+   "winner": "Kingsley",
+   "margin": 8,
+   "alpha": 0.8
+  },
+  "123": {
+   "winner": "Carlow",
+   "margin": 22,
+   "alpha": 1.2
+  },
+  "124": {
+   "winner": "Alder State",
+   "margin": 3,
+   "alpha": 0.8
+  },
+  "125": {
+   "winner": "Oakhurst",
+   "margin": 13,
+   "alpha": 1.2
+  },
+  "126": {
+   "winner": "Larkspur",
+   "margin": 8,
+   "alpha": 1.2
+  },
+  "127": {
+   "winner": "Kingsley",
+   "margin": 4,
+   "alpha": 0.8
+  },
+  "128": {
+   "winner": "Oakhurst",
+   "margin": 29,
+   "alpha": 0.8
+  },
+  "129": {
+   "winner": "Carlow",
+   "margin": 14,
+   "alpha": 1.2
+  },
+  "130": {
+   "winner": "Millbrook",
+   "margin": 23,
+   "alpha": 1.2
+  },
+  "131": {
+   "winner": "Eastvale",
+   "margin": 15,
+   "alpha": 0.8
+  },
+  "132": {
+   "winner": "Larkspur",
+   "margin": 45,
+   "alpha": 0.8
+  },
+  "133": {
+   "winner": "Ashford",
+   "margin": 24,
+   "alpha": 1.2
+  },
+  "134": {
+   "winner": "Ashford",
+   "margin": 18,
+   "alpha": 1.0
+  },
+  "135": {
+   "winner": "Hartwell",
+   "margin": 3,
+   "alpha": 1.0
+  }
+ }
+}
