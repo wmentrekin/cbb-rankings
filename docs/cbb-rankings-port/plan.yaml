@@ -34,7 +34,9 @@ approach:
     - "Changed on purpose and recorded: unplayed games are detected from source status, not a 0-0 score; ties are dropped; the connectivity index is kept as a logged diagnostic only."
     - "Parity is proven against a frozen reference: a vendored copy of the football objective and derivations under tests/reference/ (provenance cfb-rankings @ 8ab8201, cvxpy version, solver), changed only to take in-memory inputs, plus golden outputs generated once from the real football code. No cross-repository import."
     - "Cadence: weekly, Monday 10:00 UTC. Week N is a Monday-Sunday bucket of US/Eastern game dates counted from a stored per-season anchor. The Monday run publishes the week that ended the day before. Every week through the one containing Selection Sunday gets a snapshot; nothing after."
-    - "Rated games are flagged at ingest (is_rated): regular season, including in-season events, plus conference tournaments. The flag's rules come from the probe's reading of season_type and tournament."
+    - "Rated games are flagged at ingest (is_rated): CBBD marks conference tournaments and in-season events as seasonType regular, and NCAA, NIT and Crown games as postseason, so is_rated is seasonType regular on or before Selection Sunday."
+    - "Non-D-I games the source lists are trusted as official, as football does; a disputed exhibition can be removed through the overrides file."
+    - "Ingest cost (probe): 4 API calls per full season, 1 per weekly update; logos are on cdn.collegefootballdata.com, already allowed by the site's CSP."
     - "Week resolution is one function, written in B2 and imported by B4."
     - "Artifacts keep football's JSON shapes under a cbb/ key prefix; staging runs write under cbb-staging/. The conference display string and logo URL are resolved in the pipeline at artifact build."
     - "Site: a per-sport config (data path, R2 prefix, week label, season label formatter, conference names, enabled views) drives shared rankings components. Fetching CBB data is switched on in B6, not B5, so production builds cannot fail on missing cbb/ data."
@@ -51,11 +53,12 @@ contracts:
     - "Index file: {generated_at_utc, latest_season, latest_week, seasons:[{season, weeks:[int]}]}"
     - "site sport config: {slug, dataDir, r2Prefix, weekLabel, seasonLabel(season), conferenceShortNames, views}"
   schemas:
-    - "PROVISIONAL until B1-T1 reports."
-    - "seasons(season PRIMARY KEY, anchor_monday, selection_sunday, last_ingested_at)"
-    - "teams(id, season, school, abbreviation, conference, primary_color, secondary_color, logo, PRIMARY KEY (id, season)); D-I only"
-    - "games(id PRIMARY KEY, season, week, game_date TEXT (US/Eastern), start_date TEXT ISO UTC, season_type, tournament, is_rated, status, home_team_id, home_team, home_score, away_team_id, away_team, away_score, neutral_site, conference_game, periods, margin, winner_team_id, alpha)"
+    - "Final after the B1-T1 probe (docs/source-probe.md)."
+    - "seasons(season PRIMARY KEY (the year the season ends), anchor_monday, selection_sunday (entered by hand), last_ingested_at)"
+    - "teams(id, season, source_id, school, abbreviation, conference_id, conference, primary_color NULL, secondary_color NULL, logo, logo_dark, PRIMARY KEY (id, season)); D-I only, from /teams?season=S"
+    - "games(id PRIMARY KEY, source_id, season, week, game_date TEXT (US/Eastern), start_date TEXT ISO UTC, season_type, tournament NULL, game_type, game_notes NULL, is_rated, status (scheduled|in_progress|final|postponed|cancelled), home_team_id NOT NULL, home_team, home_score NULL, away_team_id NOT NULL, away_team, away_score NULL, neutral_site, conference_game, periods, margin NULL, winner_team_id NULL, alpha NULL); team ids are not foreign keys because non-D-I opponents are not in teams"
     - "ratings(team_id, season, week, rating, wins, losses, PRIMARY KEY (team_id, season, week)); ratings_staging with the same columns"
+    - "Rules: non-D-I = team id not in teams for that season; games with both sides non-D-I are dropped and counted in the log; played = status final; is_rated = season_type regular AND game_date <= selection_sunday; week 1 starts on the opening Monday and games before it are folded into week 1; postponed games stay as their own rows and the replay arrives as a new id."
   config_changes:
     - "cbb-rankings secrets (names only): CBBD_API_KEY, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_D1_DATABASE_ID, CLOUDFLARE_API_TOKEN, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, PERSONAL_SITE_DEPLOY_HOOK_URL"
     - "personal-site: public/_headers img-src gains the basketball logo host; .gitignore gains public/data/cbb/"
@@ -259,7 +262,6 @@ model_routing_notes:
   - "Model selection is by name at spawn; reasoning level is not independently controllable."
 
 open_questions:
-  - "G0: how the probe reaches the CBBD API (allow the host in this environment, or a manual Actions run)."
   - "B7: does 'Why I Built It' stay football-framed?"
 
 review:

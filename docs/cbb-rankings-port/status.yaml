@@ -44,8 +44,8 @@ branching:
   branch_name: "claude/sleepy-tesla-rnjsvt"
 
 summary:
-  current_focus: "Execution: B1-T1 (source probe) and B5-T2 (site components) running; B1-T3 starts when the probe reports"
-  last_completed: "B5-T1 committed and pushed in personal-site (b0480c8); B1-T2 D1 facts recorded in plan.yaml"
+  current_focus: "Execution: B1-T3 (scaffold, schema, storage client) and B5-T2 (site components) running"
+  last_completed: "B1-T1 probe: CBBD usable, non-D-I games present and identifiable; schema finalized in plan.yaml"
   current_blocker: ""
 
 artifacts:
@@ -171,11 +171,11 @@ agents:
     requested_model_tier: "frontier"
     requested_reasoning: "high"
     requested_provider_model: "opus"
-    actual_model: ""
-    actual_reasoning: ""
+    actual_model: "claude-opus-5-5"
+    actual_reasoning: "not independently controllable"
     routing_enforced: true
     escalation_count: 0
-    status: "running"
+    status: "done"
     stage: "execution"
     task: "B1-T1: probe the CBBD API (40-call budget)"
     last_update: "2026-11-23"
@@ -193,6 +193,21 @@ agents:
     status: "running"
     stage: "execution"
     task: "B5-T2: shared toolbar, panels and client script"
+    last_update: "2026-11-23"
+    blocker: ""
+  - id: "data-engineer-2"
+    role: "data-engineer"
+    task_profile: "implementation"
+    requested_model_tier: "balanced"
+    requested_reasoning: "medium"
+    requested_provider_model: "sonnet"
+    actual_model: ""
+    actual_reasoning: ""
+    routing_enforced: true
+    escalation_count: 0
+    status: "running"
+    stage: "execution"
+    task: "B1-T3: scaffold, D1 schema and storage client"
     last_update: "2026-11-23"
     blocker: ""
 
