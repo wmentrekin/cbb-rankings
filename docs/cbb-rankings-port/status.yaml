@@ -242,6 +242,7 @@ decisions:
   - "Owner: keep football constants at launch."
   - "Owner (G0): same R2 bucket as football, cbb/ prefix."
   - "Owner (G0): will allow api.collegebasketballdata.com in this environment for the probe."
+  - "Owner: confirmed trusting the source on non-D-I games (overrides available) and week 1 starting on the opening Monday with earlier games folded in."
   - "Owner (G1): provided a D1 Edit token (stored on the environment, proxy-injected) and asked the orchestrator to create the database; cbb-rankings D1 database created, id 4670facc-438e-40ce-9841-b4626c6ca3f0. Stay on the free CBBD quota."
 
 model_routing:
