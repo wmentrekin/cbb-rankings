@@ -195,6 +195,9 @@ decisions:
   - "Owner: extract shared site components from the CFB page first."
   - "Owner: no need to recreate the Season Grid yet; CBB page is the rankings table only."
   - "Owner: keep football constants at launch."
+  - "Owner (G0): same R2 bucket as football, cbb/ prefix."
+  - "Owner (G0): will allow api.collegebasketballdata.com in this environment for the probe."
+  - "Owner (G1): will create the D1 database and API token; stay on the free CBBD quota."
 
 model_routing:
   provider: "Claude Code / Anthropic"

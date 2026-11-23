@@ -255,9 +255,7 @@ model_routing_notes:
   - "Model selection is by name at spawn; reasoning level is not independently controllable."
 
 open_questions:
-  - "G0: same R2 bucket with a cbb/ prefix, or a separate bucket?"
   - "G0: how the probe reaches the CBBD API (allow the host in this environment, or a manual Actions run)."
-  - "G1: free shared CBBD quota or a paid tier?"
   - "B7: does 'Why I Built It' stay football-framed?"
 
 review:

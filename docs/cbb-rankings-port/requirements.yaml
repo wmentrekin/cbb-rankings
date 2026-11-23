@@ -67,7 +67,7 @@ assumptions:
   - "Teams are keyed by the source's team id in storage and in the model; names are display only."
   - "The site labels a basketball season as a span (2026-27) even though it is stored as one integer."
   - "The prior-fade schedule keeps football's formula and week-7 cutoff, applied to basketball week numbers."
-  - "R2: same bucket as football with a cbb/ key prefix (cbb/rankings/...), unless the owner prefers a separate bucket."
+  - "R2: same bucket as football with a cbb/ key prefix (owner decision); free CBBD quota shared with football (owner decision), so call counts are budgeted."
   - "The site rebuild is triggered by the same Cloudflare Pages deploy hook the football workflow calls."
   - "The EQI methodology becomes one shared formulation with a per-sport parameter table and sport-neutral wording for the lower-division term."
 
@@ -137,8 +137,6 @@ acceptance_criteria:
 open_questions:
   - "Which D1 access path, per B1-T2: REST query from Python, or SQL files applied with wrangler?"
   - "Does CBBD include games against non-D-I opponents, and how can a non-D-I team be identified? (Resolved by task B2-T1; needs network access to api.collegebasketballdata.com or an Actions run.)"
-  - "Same R2 bucket with a cbb/ prefix, or a separate bucket?"
-  - "Is the shared CFBD/CBBD free quota enough alongside the football job, or will a paid tier be used?"
   - "Does the 'Why I Built It' story on the EQI page stay football-framed?"
 
 ready_for_planning: true
