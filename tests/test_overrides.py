@@ -88,9 +88,38 @@ def test_entry_rejections(tmp_path, bad, fragment):
     assert fragment in str(err.value)
 
 
-def test_duplicate_game_ids_rejected_across_kinds(tmp_path):
-    with pytest.raises(OverrideFileError, match="duplicate game_id"):
-        load_overrides(write(tmp_path, [good(), {**good_exclude(), "game_id": 1}]))
+def good_site():
+    return {"kind": "site", "game_id": 3, "season": 2026, "home_team_id": 2, "away_team_id": 3,
+            "neutral_site": True, "swap_home_away": False, "reason": "r"}
+
+
+def test_one_score_or_site_entry_plus_one_exclude_per_game(tmp_path):
+    entries = [good(), {**good_exclude(), "game_id": 1}, {**good_site(), "game_id": 9}, {**good_exclude(), "game_id": 9}]
+    assert load_overrides(write(tmp_path, entries)) == entries
+    for second, label in (({**good(), "home_score": 71}, "score/site"), ({**good_site(), "game_id": 1}, "score/site"),
+                          ({**good_exclude(), "game_id": 1}, "exclude")):
+        first = [good(), {**good_exclude(), "game_id": 1}] if label == "exclude" else [good()]
+        with pytest.raises(OverrideFileError, match=f"duplicate game_id.*at most one {label}"):
+            load_overrides(write(tmp_path, first + [second]))
+
+
+@pytest.mark.parametrize("bad, fragment", [
+    ({k: v for k, v in good_site().items() if k != "neutral_site"}, "missing key(s) ['neutral_site']"),
+    ({**good_site(), "neutral_site": 1}, "neutral_site must be true or false"),
+    ({**good_site(), "swap_home_away": "yes"}, "swap_home_away must be true or false"),
+    ({**good_site(), "home_score": 1}, "unknown key(s) ['home_score']"),
+    ({**good_site(), "reason": ""}, "reason must be a non-empty string"),
+    ({**good_exclude(), "neutral_site": True}, "unknown key(s) ['neutral_site']"),
+])
+def test_site_entry_rejections(tmp_path, bad, fragment):
+    with pytest.raises(OverrideFileError, match="overrides\\[0\\]") as err:
+        load_overrides(write(tmp_path, [bad]))
+    assert fragment in str(err.value)
+
+
+def test_swap_home_away_is_optional(tmp_path):
+    entry_ = {k: v for k, v in good_site().items() if k != "swap_home_away"}
+    assert load_overrides(write(tmp_path, [entry_])) == [entry_]
 
 
 def test_file_level_rejections(tmp_path):
@@ -238,3 +267,104 @@ def test_overrides_survive_reingest_when_reapplied(ingested, tmp_path):
     s = apply_overrides(ingested, 2026, path=path)
     assert s.applied == [HOME_WIN, NEUTRAL]
     assert {g: game(ingested, g) for g in (HOME_WIN, NEUTRAL)} == corrected
+
+
+# ---- site (real rows: Chaminade, a non-D-I team the source lists as home at other schools' arenas) ----
+
+SWAP_GAME, NEUTRAL_GAME = 213466, 358311  # source: home Chaminade at Washington State's arena; neutral Maui game marked not neutral
+
+
+def site_entry(store, game_id, **changes):
+    return entry(store, game_id, "site", neutral_site=False, **changes)
+
+
+def test_site_override_swaps_sides_and_rederives_with_real_rows(ingested, tmp_path):
+    before = game(ingested, SWAP_GAME)
+    assert (before["home_team_id"], before["home_score"], before["away_team_id"], before["away_score"]) == (902, 85, 344, 90)
+    assert (before["winner_team_id"], before["alpha"], before["neutral_site"]) == (344, 1.2, 0)
+    s = apply_overrides(ingested, 2026, path=write(tmp_path, [site_entry(ingested, SWAP_GAME, swap_home_away=True)]))
+    assert s.applied == [SWAP_GAME] and s.ok
+    after = game(ingested, SWAP_GAME)
+    assert (after["home_team_id"], after["home_team"], after["home_score"]) == (344, before["away_team"], 90)
+    assert (after["away_team_id"], after["away_team"], after["away_score"]) == (902, before["home_team"], 85)
+    assert (after["winner_team_id"], after["margin"], after["alpha"]) == (344, 5, 0.8)  # now a home win
+    unchanged = {c: before[c] for c in before if not c.startswith(("home_", "away_")) and c not in ("alpha",)}
+    assert {c: after[c] for c in unchanged} == unchanged
+
+
+def test_site_override_sets_neutral_without_swapping(ingested, tmp_path):
+    before = game(ingested, NEUTRAL_GAME)
+    assert (before["neutral_site"], before["alpha"], before["winner_team_id"]) == (0, 1.2, 295)
+    entry_ = entry(ingested, NEUTRAL_GAME, "site", neutral_site=True, reason="Maui Invitational, Lahaina Civic Center")
+    s = apply_overrides(ingested, 2026, path=write(tmp_path, [entry_]))
+    assert s.applied == [NEUTRAL_GAME]
+    after = game(ingested, NEUTRAL_GAME)
+    assert after == {**before, "neutral_site": 1, "alpha": 1.0}
+
+
+def test_site_override_is_idempotent_even_after_the_swap(ingested, tmp_path):
+    path = write(tmp_path, [site_entry(ingested, SWAP_GAME, swap_home_away=True),
+                            entry(ingested, NEUTRAL_GAME, "site", neutral_site=True)])
+    apply_overrides(ingested, 2026, path=path)
+    changes = ingested._conn.total_changes
+    second = apply_overrides(ingested, 2026, path=path)
+    assert second.applied == [] and sorted(second.unchanged) == sorted([SWAP_GAME, NEUTRAL_GAME]) and second.ok
+    assert second.rows_written == 0 and ingested._conn.total_changes == changes
+
+
+def test_site_override_safety_checks(ingested, tmp_path, caplog):
+    wrong = site_entry(ingested, SWAP_GAME, swap_home_away=True, home_team_id=1)
+    no_swap_flag_but_swapped = entry(ingested, NEUTRAL_GAME, "site", neutral_site=True)
+    no_swap_flag_but_swapped.update(home_team_id=295, away_team_id=902)  # the stored pair reversed, no swap requested
+    postponed = site_entry(ingested, POSTPONED, swap_home_away=True, season=2025)
+    before = {g: game(ingested, g) for g in (SWAP_GAME, NEUTRAL_GAME, POSTPONED)}
+    with caplog.at_level(logging.ERROR):
+        s = apply_overrides(ingested, None, path=write(tmp_path, [wrong, no_swap_flag_but_swapped, postponed]))
+    reasons = {f["game_id"]: f["reason"] for f in s.failed}
+    assert set(reasons) == {SWAP_GAME, NEUTRAL_GAME, POSTPONED} and not s.ok
+    assert "home_team_id mismatch" in reasons[SWAP_GAME] and "season mismatch" in reasons[POSTPONED]
+    assert {g: game(ingested, g) for g in before} == before
+    assert "OVERRIDE_FAILURE: game_id=213466" in caplog.text
+
+
+def test_site_override_on_a_game_without_a_result_keeps_it_unplayed(ingested, tmp_path):
+    before = game(ingested, POSTPONED)
+    s = apply_overrides(ingested, 2026, path=write(tmp_path, [site_entry(ingested, POSTPONED, swap_home_away=True)]))
+    assert s.applied == [POSTPONED]
+    after = game(ingested, POSTPONED)
+    assert after["home_team_id"] == before["away_team_id"] and after["winner_team_id"] is None and after["alpha"] is None
+
+
+def test_site_or_score_combine_with_exclude_in_either_order(ingested, tmp_path):
+    for order in (("site", "exclude"), ("exclude", "site")):
+        run.ingest_season(ingested, 2026, season_2026_api())
+        entries = {"site": site_entry(ingested, SWAP_GAME, swap_home_away=True), "exclude": entry(ingested, SWAP_GAME, "exclude")}
+        s = apply_overrides(ingested, 2026, path=write(tmp_path, [entries[k] for k in order]))
+        assert s.ok and s.applied == [SWAP_GAME, SWAP_GAME]
+        row = game(ingested, SWAP_GAME)
+        assert (row["home_team_id"], row["is_rated"]) == (344, 0)
+    # a site swap leaves the exclude entry's team ids valid in either orientation
+    again = apply_overrides(ingested, 2026, path=write(tmp_path, [entries["site"], entries["exclude"]]))
+    assert again.ok and again.applied == []
+
+
+def test_overrides_are_restored_only_when_applied_after_a_reingest(ingested, tmp_path):
+    """The ordering rule: a re-ingest overwrites corrections with the source, `apply_overrides` puts them back."""
+    path = write(tmp_path, [
+        site_entry(ingested, SWAP_GAME, swap_home_away=True),
+        entry(ingested, NEUTRAL_GAME, "site", neutral_site=True),
+        entry(ingested, HOME_WIN, home_score=50, away_score=60),
+        entry(ingested, NEUTRAL, "exclude"),
+    ])
+    ids = (SWAP_GAME, NEUTRAL_GAME, HOME_WIN, NEUTRAL)
+    source = {g: game(ingested, g) for g in ids}
+    apply_overrides(ingested, 2026, path=path)
+    corrected = {g: game(ingested, g) for g in ids}
+    assert all(corrected[g] != source[g] for g in ids)
+
+    run.ingest_season(ingested, 2026, season_2026_api())  # the weekly full-season ingest
+    assert {g: game(ingested, g) for g in ids} == source  # reverted: ingest alone is not enough
+
+    s = apply_overrides(ingested, 2026, path=path)  # ... so overrides run after it
+    assert sorted(s.applied) == sorted(ids) and s.ok
+    assert {g: game(ingested, g) for g in ids} == corrected

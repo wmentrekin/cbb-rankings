@@ -8,7 +8,12 @@ pipeline, so callers read `client.calls` and report it.
 Only idempotent GETs are retried, and only for failures that say "try again": connection
 errors, timeouts and 429/500/502/503/504. Any other error status fails on the first attempt.
 After the retries are used up the last failure is raised (`requests.HTTPError` for a status,
-the original exception for a network failure).
+the original exception for a network failure). A 429 is retried only once unless the response
+carries a Retry-After header: a spent monthly quota should fail fast, not burn more calls.
+
+Quota floor: `X-CallLimit-Remaining` is read after every response. Once it is below the floor
+(env `CBBD_QUOTA_FLOOR`, default 50) no further request is sent and `QuotaFloorError` is raised,
+because the quota is shared with a live football pipeline.
 """
 from __future__ import annotations
 
@@ -27,8 +32,23 @@ RETRY_BACKOFF = 2.0  # sleeps 0, 4, 8, 16 s before retries 1-4, like urllib3's b
 RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 RETRY_AFTER_MAX = 60  # never sleep longer than this for a Retry-After header
 QUOTA_HEADER = "X-CallLimit-Remaining"
+QUOTA_FLOOR_ENV = "CBBD_QUOTA_FLOOR"
+DEFAULT_QUOTA_FLOOR = 50
 
 log = logging.getLogger(__name__)
+
+
+class QuotaFloorError(RuntimeError):
+    """The remaining API quota is below the floor, so no further call is made."""
+
+
+def quota_floor_from_env() -> int:
+    raw = os.environ.get(QUOTA_FLOOR_ENV, "").strip()
+    if not raw:
+        return DEFAULT_QUOTA_FLOOR
+    if not raw.isdigit():
+        raise ValueError(f"{QUOTA_FLOOR_ENV} must be a non-negative integer, got {raw!r}")
+    return int(raw)
 
 
 class CbbdClient:
@@ -41,6 +61,7 @@ class CbbdClient:
         base_url: str = BASE_URL,
         session: requests.Session | None = None,
         sleep: Callable[[float], None] = time.sleep,
+        quota_floor: int | None = None,
     ):
         # In cloud agent sessions the key variable may hold the placeholder "proxy-injected"
         # and a proxy supplies the real header; it is sent like any other key.
@@ -51,14 +72,17 @@ class CbbdClient:
         self._base_url = base_url.rstrip("/")
         self._session = session or requests.Session()
         self._sleep = sleep
+        self.quota_floor = quota_floor_from_env() if quota_floor is None else quota_floor
         self.calls = 0
         self.quota_remaining: int | None = None  # last X-CallLimit-Remaining seen
 
     def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         """GET `path` and return the decoded JSON body."""
         url = f"{self._base_url}{path}"
+        rate_limited = 0
         for attempt in range(RETRY_TOTAL + 1):
             retry_after = None
+            self._check_quota(path)
             try:
                 self.calls += 1
                 response = self._session.get(
@@ -73,13 +97,24 @@ class CbbdClient:
                 log.warning("GET %s failed (%s); retry %d/%d", path, type(exc).__name__, attempt + 1, RETRY_TOTAL)
             else:
                 self._note_quota(response)
-                if response.status_code not in RETRY_STATUSES or attempt == RETRY_TOTAL:
+                retry_after = _retry_after(response)
+                if response.status_code == 429:
+                    rate_limited += 1
+                # A second 429 without Retry-After is a spent quota, not a blip: stop here.
+                spent = response.status_code == 429 and retry_after is None and rate_limited > 1
+                if response.status_code not in RETRY_STATUSES or attempt == RETRY_TOTAL or spent:
                     response.raise_for_status()
                     return response.json()
-                retry_after = _retry_after(response)
                 log.warning("GET %s returned %d; retry %d/%d", path, response.status_code, attempt + 1, RETRY_TOTAL)
             self._sleep(retry_after if retry_after is not None else _backoff(attempt))
         raise AssertionError("unreachable")  # pragma: no cover
+
+    def _check_quota(self, path: str) -> None:
+        if self.quota_remaining is not None and self.quota_remaining < self.quota_floor:
+            raise QuotaFloorError(
+                f"CBBD quota remaining {self.quota_remaining} is below the floor {self.quota_floor} "
+                f"({QUOTA_FLOOR_ENV}); not calling {path}. The quota is shared with the football pipeline."
+            )
 
     def _note_quota(self, response: requests.Response) -> None:
         value = response.headers.get(QUOTA_HEADER)

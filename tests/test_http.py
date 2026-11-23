@@ -106,3 +106,65 @@ def test_key_is_never_logged(caplog):
 
 def test_constants_match_football():
     assert (http.CONNECT_TIMEOUT, http.READ_TIMEOUT, http.RETRY_TOTAL, http.RETRY_AFTER_MAX) == (10, 60, 4, 60)
+
+
+# --- 429 handling ---------------------------------------------------------------------------
+def test_a_second_429_without_retry_after_fails_fast():
+    client, _, sleeps = make([FakeResponse(429), FakeResponse(429), FakeResponse(200, ["never"])])
+    with pytest.raises(requests.HTTPError):
+        client.get("/x")
+    assert client.calls == 2 and sleeps == [0.0]  # one retry, then stop: a spent quota is not retried
+
+
+def test_429_with_retry_after_keeps_retrying_up_to_the_normal_limit():
+    client, _, sleeps = make([FakeResponse(429, headers={"Retry-After": "2"})] * 4 + [FakeResponse(200, ["ok"])])
+    assert client.get("/x") == ["ok"]
+    assert client.calls == 5 and sleeps == [2.0] * 4
+
+
+def test_429_then_other_errors_still_use_their_own_budget():
+    client, _, _ = make([FakeResponse(429), FakeResponse(503), FakeResponse(200, [1])])
+    assert client.get("/x") == [1] and client.calls == 3
+
+
+# --- quota floor ----------------------------------------------------------------------------
+def remaining(n, body=None, status=200):
+    return FakeResponse(status, body, {"X-CallLimit-Remaining": str(n)})
+
+
+def test_no_further_call_is_made_once_remaining_is_below_the_floor():
+    session = FakeSession([remaining(60, [1]), remaining(49, [2]), remaining(10, [3])])
+    client = CbbdClient("k", session=session, sleep=lambda s: None)
+    assert client.get("/a") == [1] and client.get("/b") == [2]  # 49 is below 50, but that call's data is kept
+    with pytest.raises(http.QuotaFloorError, match="49 is below the floor 50"):
+        client.get("/c")
+    assert client.calls == 2 and len(session.requests) == 2
+
+
+def test_remaining_equal_to_the_floor_is_allowed():
+    client = CbbdClient("k", session=FakeSession([remaining(50, [1]), remaining(50, [2])]), sleep=lambda s: None)
+    assert client.get("/a") == [1] and client.get("/b") == [2]
+
+
+def test_floor_also_stops_retries():
+    session = FakeSession([remaining(40, status=503), FakeResponse(200, [1])])
+    client = CbbdClient("k", session=session, sleep=lambda s: None)
+    with pytest.raises(http.QuotaFloorError):
+        client.get("/a")
+    assert client.calls == 1
+
+
+def test_floor_from_env_argument_and_default(monkeypatch):
+    monkeypatch.delenv("CBBD_QUOTA_FLOOR", raising=False)
+    assert CbbdClient("k", session=FakeSession([])).quota_floor == 50
+    monkeypatch.setenv("CBBD_QUOTA_FLOOR", "200")
+    assert CbbdClient("k", session=FakeSession([])).quota_floor == 200
+    assert CbbdClient("k", session=FakeSession([]), quota_floor=5).quota_floor == 5
+    monkeypatch.setenv("CBBD_QUOTA_FLOOR", "lots")
+    with pytest.raises(ValueError, match="CBBD_QUOTA_FLOOR"):
+        CbbdClient("k", session=FakeSession([]))
+
+
+def test_missing_quota_header_never_trips_the_floor():
+    client = CbbdClient("k", session=FakeSession([FakeResponse(200, [1]), FakeResponse(200, [2])]), sleep=lambda s: None)
+    assert client.get("/a") == [1] and client.get("/b") == [2] and client.quota_remaining is None

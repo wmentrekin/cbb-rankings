@@ -7,18 +7,28 @@ request, and they are re-applied on every run: an ingest upsert rewrites an over
 from the source, so `apply_overrides` must run right after ingest and before the model reads
 games. A manual database edit would simply be overwritten.
 
-Two kinds of entry (every key shown is required unless marked optional; unknown keys are
+Three kinds of entry (every key shown is required unless marked optional; unknown keys are
 rejected):
 
     {"kind": "score", "game_id": 401, "season": 2026, "home_team_id": 52, "away_team_id": 99,
      "home_score": 70, "away_score": 72, "periods": 2, "reason": "Official scorer corrected ..."}
     {"kind": "exclude", "game_id": 402, "season": 2026, "home_team_id": 52, "away_team_id": 721,
      "reason": "Exhibition against a non-D-I school the source lists as official"}
+    {"kind": "site", "game_id": 403, "season": 2026, "home_team_id": 902, "away_team_id": 344,
+     "neutral_site": false, "swap_home_away": true, "reason": "Played at the away team's arena"}
 
 `score` sets the final score; winner_team_id, margin and alpha are re-derived with
 `ingest.derive.derive_result` (the function ingest uses) from the stored neutral_site flag, so
 they cannot drift; `periods` (optional, an int >= 2) is stored when given. Only a game whose
 stored status is `final` can be re-scored. `exclude` sets `is_rated = 0` and leaves scores alone.
+`site` fixes the source's inverted-site quirks: it sets `neutral_site` and, when
+`swap_home_away` (optional, default false) is true, swaps home and away (ids, names and scores
+together), then re-derives winner, margin and alpha. Its team ids are the game AS THE SOURCE
+LISTS IT; a game already swapped by an earlier run is recognised, so applying twice is a no-op.
+
+A game takes at most one `score` or `site` entry plus optionally one `exclude`; the two
+combine (each reads the row the other left). An `exclude` matches the two teams in either order,
+because a `site` swap may have reversed them.
 
 Team ids and season are a safety check against the stored row: a mismatch fails that entry and
 touches nothing. A failed entry is logged with OVERRIDE_FAILURE and returned in the summary, and
@@ -47,8 +57,10 @@ _IDENTITY = {"kind", "game_id", "season", "home_team_id", "away_team_id", "reaso
 _ALLOWED_KEYS = {
     "score": (_IDENTITY | {"home_score", "away_score"}, {"periods"}),  # (required, optional)
     "exclude": (_IDENTITY, set()),
+    "site": (_IDENTITY | {"neutral_site"}, {"swap_home_away"}),
 }
 _INT_KEYS = ("game_id", "season", "home_team_id", "away_team_id", "home_score", "away_score", "periods")
+_BOOL_KEYS = ("neutral_site", "swap_home_away")
 
 
 class OverrideFileError(ValueError):
@@ -74,6 +86,9 @@ def _entry_errors(entry: Any) -> list[str]:
     for key in _INT_KEYS:
         if key in entry and not _is_int(entry[key]):
             errors.append(f"{key} must be an integer, got {entry[key]!r}")
+    for key in _BOOL_KEYS:
+        if key in entry and not isinstance(entry[key], bool):
+            errors.append(f"{key} must be true or false, got {entry[key]!r}")
     reason = entry.get("reason")
     if "reason" in entry and not (isinstance(reason, str) and reason.strip()):
         errors.append("reason must be a non-empty string")
@@ -105,9 +120,11 @@ def load_overrides(path: Path | str | None = None) -> list[dict[str, Any]]:
         raise OverrideFileError(f"{target}: 'overrides' must be a list")
     for i, entry in enumerate(entries):
         errors += [f"overrides[{i}]: {e}" for e in _entry_errors(entry)]
-    ids = [e["game_id"] for e in entries if isinstance(e, dict) and _is_int(e.get("game_id"))]
-    if dupes := sorted({g for g in ids if ids.count(g) > 1}):
-        errors.append(f"duplicate game_id(s) {dupes}: a game takes at most one override entry")
+    valid = [e for e in entries if isinstance(e, dict) and _is_int(e.get("game_id")) and e.get("kind") in _ALLOWED_KEYS]
+    for group, label in ((("score", "site"), "score/site"), (("exclude",), "exclude")):
+        ids = [e["game_id"] for e in valid if e["kind"] in group]
+        if dupes := sorted({g for g in ids if ids.count(g) > 1}):
+            errors.append(f"duplicate game_id(s) {dupes}: a game takes at most one {label} entry")
     if errors:
         raise OverrideFileError(f"{target}: " + "; ".join(errors))
     return entries
@@ -137,15 +154,54 @@ def _fail(summary: OverrideSummary, game_id: int, reason: str) -> None:
     log.error("%s: game_id=%s reason=%s", OVERRIDE_FAILURE_MARKER, game_id, reason)
 
 
-def _target_row(entry: dict[str, Any], stored: dict[str, Any], alpha_cfg: AlphaConfig) -> dict[str, Any]:
-    """The full stored row with the override applied; raises ValueError when it cannot be."""
-    for key in ("season", "home_team_id", "away_team_id"):
+def _swap_sides(row: dict[str, Any]) -> dict[str, Any]:
+    """Home and away exchanged: ids, names and scores together (winner and margin are unchanged)."""
+    swapped = dict(row)
+    for field_ in ("team_id", "team", "score"):
+        swapped[f"home_{field_}"], swapped[f"away_{field_}"] = row[f"away_{field_}"], row[f"home_{field_}"]
+    return swapped
+
+
+def _require_orientation(stored: dict[str, Any], entry: dict[str, Any]) -> None:
+    for key in ("home_team_id", "away_team_id"):
         if stored[key] != entry[key]:
             raise ValueError(f"{key} mismatch: stored {stored[key]!r}, override {entry[key]!r}")
+
+
+def _site_row(entry: dict[str, Any], stored: dict[str, Any], alpha_cfg: AlphaConfig) -> dict[str, Any]:
+    pair = (stored["home_team_id"], stored["away_team_id"])
+    if pair == (entry["home_team_id"], entry["away_team_id"]):
+        row = dict(stored)  # as the source lists it
+    elif entry.get("swap_home_away") and pair == (entry["away_team_id"], entry["home_team_id"]):
+        row = _swap_sides(stored)  # an earlier run already swapped it: undo, then redo below
+    else:
+        _require_orientation(stored, entry)
+        raise ValueError(f"team id mismatch: stored home/away {pair}")  # swapped pair without swap_home_away
+    if entry.get("swap_home_away"):
+        row = _swap_sides(row)
+    row["neutral_site"] = int(entry["neutral_site"])
+    result, _ = derive_result(  # a game without a clean final result keeps its NULL result
+        row["status"], row["home_team_id"], row["away_team_id"], row["home_score"], row["away_score"],
+        bool(row["neutral_site"]), alpha_cfg,
+    )
+    row.update(result)
+    return row
+
+
+def _target_row(entry: dict[str, Any], stored: dict[str, Any], alpha_cfg: AlphaConfig) -> dict[str, Any]:
+    """The full stored row with the override applied; raises ValueError when it cannot be."""
+    if stored["season"] != entry["season"]:
+        raise ValueError(f"season mismatch: stored {stored['season']!r}, override {entry['season']!r}")
+    kind = entry["kind"]
+    if kind == "site":
+        return _site_row(entry, stored, alpha_cfg)
+    if kind == "exclude":
+        stored_pair = {stored["home_team_id"], stored["away_team_id"]}
+        if stored_pair != {entry["home_team_id"], entry["away_team_id"]}:
+            _require_orientation(stored, entry)  # names the differing id
+        return {**stored, "is_rated": 0}
+    _require_orientation(stored, entry)
     row = dict(stored)
-    if entry["kind"] == "exclude":
-        row["is_rated"] = 0
-        return row
     if stored["status"] != "final":
         raise ValueError(f"only a final game can be re-scored; stored status is {stored['status']!r}")
     result, code = derive_result(
