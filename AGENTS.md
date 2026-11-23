@@ -4,8 +4,7 @@
 
 Weekly batch pipeline (GitHub Actions) that ranks NCAA Division I men's basketball teams with a
 convex quadratic program ported from `cfb-rankings`: ingest games from CollegeBasketballData
-(CBBD) into Cloudflare D1, solve, publish JSON to R2. Only storage exists so far; ingestion
-(`ingest/`), the model (`model/`) and publishing (`artifacts/`) arrive in later batches. Plan:
+(CBBD) into Cloudflare D1, solve, publish JSON to R2. Storage and ingestion (`ingest/`) exist; the model (`model/`) and publishing (`artifacts/`) arrive in later batches. Plan:
 `docs/cbb-rankings-port/`. Source behaviour: `docs/source-probe.md`.
 
 ## Layout
@@ -15,6 +14,11 @@ convex quadratic program ported from `cfb-rankings`: ingest games from CollegeBa
 - `database/d1.py` - `D1Client`: REST client (retries, batch, `/raw` reads)
 - `database/local.py` - `LocalStore`: same interface on `sqlite3`, applies the migrations
 - `database/__init__.py` - `get_store()`, chosen by `CBB_STORE` (`d1` default, `local`)
+- `ingest/http.py` - `CbbdClient`: retrying GET with a call counter; `ingest/teams.py`,
+  `ingest/games.py` - fetch and map; `ingest/derive.py` - pure per-game derivations and
+  classification, `AlphaConfig`; `ingest/weeks.py` - seasons table and week logic;
+  `ingest/seasons.json` - hand-entered Selection Sundays; `ingest/run.py` - `ingest_season`,
+  `ingest_week`, CLI
 - `tests/` - pytest; no network
 - `wrangler.jsonc` - only the `d1_databases` entry (used by `wrangler d1 migrations`)
 
@@ -54,6 +58,22 @@ uv run pytest -q   # tests
   rows) and `rows_read` is 0. Use it for unit tests and dry runs.
 - Migrations are append-only: add `NNNN_name.sql`; never edit an applied one.
 - Never touch any D1 database other than the one in `wrangler.jsonc`.
+
+## Ingestion rules (must be respected by every later task)
+
+- Weeks: use `ingest.weeks` only (`week_for_date`, `week_bounds`, `last_week`, `resolve_week`,
+  `get_season_row`); never recompute an anchor or reimplement week arithmetic. The anchor is stored
+  once per season and never changes.
+- Alpha constants: `ingest.derive.AlphaConfig` / `DEFAULT_ALPHA` (1.0, 0.8, 1.2) are the single
+  source; the model's config must take its defaults from them.
+- Played test for the model: `winner_team_id IS NOT NULL` (a malformed final is stored with status
+  `final` but NULL result). Rated games: `is_rated = 1`. Non-D-I: id not in `teams` for the season.
+- Selection Sunday comes from `ingest/seasons.json` (entered by hand, `provisional` warns); add the
+  new season there before ingesting it.
+- CBBD quota (about 1,000 calls a month) is shared with football: a full season is 4 calls, a weekly
+  update 1. Check `IngestSummary.api_calls` and `quota_remaining`; do not add per-game or per-team
+  calls. Never log the API key.
+- Tests use `tests/fakes.py` (`FakeApi`, trimmed real-response fixtures); no network.
 
 ## Secrets (names only)
 
