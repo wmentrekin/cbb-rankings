@@ -4,7 +4,7 @@
 
 Weekly batch pipeline (GitHub Actions) that ranks NCAA Division I men's basketball teams with a
 convex quadratic program ported from `cfb-rankings`: ingest games from CollegeBasketballData
-(CBBD) into Cloudflare D1, solve, publish JSON to R2. Storage and ingestion (`ingest/`) exist; the model (`model/`) and publishing (`artifacts/`) arrive in later batches. Plan:
+(CBBD) into Cloudflare D1, solve, publish JSON to R2. Storage, ingestion (`ingest/`) and the model (`model/`) exist; publishing (`artifacts/`) arrives in a later batch. Plan:
 `docs/cbb-rankings-port/`. Source behaviour: `docs/source-probe.md`.
 
 ## Layout
@@ -20,6 +20,8 @@ convex quadratic program ported from `cfb-rankings`: ingest games from CollegeBa
   `ingest/seasons.json` - hand-entered Selection Sundays; `ingest/run.py` - `ingest_season`,
   `ingest_week`, CLI; `ingest/overrides.py` + `ingest/game_result_overrides.json` - operator result
   overrides; `ingest/planning.py` - no-write `PlanningStore` and `CachingClient` for dry runs
+- `model/` - `config.py` (`ModelConfig`, `FOOTBALL_COMPAT`, `BASKETBALL_DEFAULT`), `assemble.py`, `solve.py`,
+  `pipeline.py` (`rate_week`); see `model/README.md`
 - `scripts/backfill_games.py` - ingest-only backfill (dry run by default); workflow
   `.github/workflows/backfill-games.yml`
 - `tests/` - pytest; no network
@@ -77,6 +79,22 @@ uv run pytest -q   # tests
   update 1. Check `IngestSummary.api_calls` and `quota_remaining`; do not add per-game or per-team
   calls. Never log the API key.
 - Tests use `tests/fakes.py` (`FakeApi`, trimmed real-response fixtures); no network.
+
+## Model rules (must be respected by every later task)
+
+- `model/` has no database access except `pipeline.rate_week`, which only reads (`store.query_rows`);
+  the orchestration writes `ratings`. Teams are integer ids; the dummy lower-division team is never a
+  rating key (only `SolveResult.r_lower`).
+- Played = `winner_team_id IS NOT NULL`, rated = `is_rated = 1`; margin and alpha come from the stored
+  columns. `week` is an int >= 1.
+- Every constant lives in `model.config.ModelConfig`. `FOOTBALL_COMPAT` and the football-parity tests
+  are frozen yardsticks (`tests/reference/**` is never edited); `BASKETBALL_DEFAULT` may differ only
+  where `tests/test_model_config.py` says so. The margin-scale basis is chosen in one line,
+  `BASKETBALL_MARGIN_SCALE_BASIS` in `model/config.py` (pending owner decision).
+- Production solver is CLARABEL, named in config; only status `optimal` is accepted, anything else
+  raises `ModelSolveError` so an unattended run fails loudly. Parity tests pass `solver="OSQP"`.
+- The objective is built vectorized; keep it mathematically identical to football's (the parity tests
+  are the check). Run `uv run pytest -q` (about 10 s; the 365-team scale test is included).
 
 ## Operator tools: overrides and backfill
 

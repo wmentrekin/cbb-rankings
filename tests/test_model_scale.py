@@ -1,0 +1,67 @@
+"""A seeded synthetic basketball-sized season (365 teams, about 5,800 rated games, 12 D-I losses to
+lower-division teams) solved with the production default config. Vectorized construction keeps this
+under a few seconds, so it runs in the default suite."""
+import time
+
+import numpy as np
+import pytest
+
+from model.config import BASKETBALL_DEFAULT
+from model.pipeline import rate_week
+from tests.reference.measure_solvers import synthetic
+
+SEASON = 2025
+LOWER_OFFSET = 100_000
+
+
+def season_rows(games, teams, season):
+    ids = {n: int(i) for n, i in zip(teams[teams.season == season].school, teams[teams.season == season].id)}
+    rows = []
+    for r in games[games.season == season].itertuples():
+        def tid(name):
+            return ids[name] if name in ids else LOWER_OFFSET + int(name.removeprefix("Lower"))
+
+        home, away = tid(r.home_team), tid(r.away_team)
+        home_won = r.home_score > r.away_score
+        rows.append({
+            "id": int(r.id) + season * 10_000, "season": season, "week": int(r.week), "game_date": "2000-01-01",
+            "start_date": "2000-01-01T00:00:00Z", "season_type": "regular", "game_type": "STD", "is_rated": 1,
+            "status": "final", "home_team_id": home, "home_team": r.home_team, "away_team_id": away,
+            "away_team": r.away_team, "home_score": int(r.home_score), "away_score": int(r.away_score),
+            "neutral_site": int(r.neutral_site), "conference_game": 0, "margin": abs(int(r.home_score) - int(r.away_score)),
+            "winner_team_id": home if home_won else away,
+            "alpha": 1.0 if r.neutral_site else (0.8 if home_won else 1.2),
+        })
+    return ids, rows
+
+
+@pytest.fixture(scope="module")
+def loaded_store():
+    from database.local import LocalStore
+
+    games, teams = synthetic()
+    store = LocalStore(":memory:")
+    for season in (SEASON - 1, SEASON):
+        ids, rows = season_rows(games, teams, season)
+        store.upsert("teams", [{"id": i, "season": season, "school": n, "conference_id": 1, "conference": "X"} for n, i in ids.items()], ("id", "season"))
+        store.upsert("games", rows, ("id",))
+    yield store
+    store.close()
+
+
+@pytest.mark.parametrize("week", [3, 19])
+def test_basketball_sized_season_solves_optimal_with_the_default_config(loaded_store, week):
+    start = time.perf_counter()
+    out = rate_week(loaded_store, SEASON, week, BASKETBALL_DEFAULT)
+    elapsed = time.perf_counter() - start
+    assert out.solve.status == "optimal" and out.solve.solver == "CLARABEL"
+    assert len(out.ratings) == 365
+    if week == 3:
+        assert out.prior_solve is not None and out.prior_solve.status == "optimal"
+        assert out.prior_solve.n_games > 5000
+    else:
+        assert out.prior_solve is None
+        assert out.solve.n_games > 5000 and out.solve.n_lower_losses == 12
+    values = np.array(list(out.ratings.values()))
+    assert values.min() >= BASKETBALL_DEFAULT.r_min - 1e-6 and values.max() <= BASKETBALL_DEFAULT.r_max + 1e-6
+    assert elapsed < 30  # measured about 1 s; the scalar-built football formulation needed 12-17 s per problem

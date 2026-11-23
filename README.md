@@ -5,8 +5,8 @@ ported from `cfb-rankings`. A weekly GitHub Actions job ingests games from
 [CollegeBasketballData](https://collegebasketballdata.com) into Cloudflare D1, solves the model,
 and publishes JSON rankings to R2 for the site.
 
-Status: storage, ingestion, result overrides and backfill. The model and publishing are planned in
-`docs/cbb-rankings-port/plan.yaml`.
+Status: storage, ingestion, result overrides, backfill and the model. Orchestration and publishing
+are planned in `docs/cbb-rankings-port/plan.yaml`.
 
 ## Storage
 
@@ -99,6 +99,14 @@ quota left. `--apply` writes, re-applies the overrides and prints `BACKFILL_APPL
 [week=W]`; it refuses an estimate above `--max-rows-written` (default 40,000; D1's free plan allows
 100,000 per day). Exit is non-zero on a fetch failure or an `OVERRIDE_FAILURE`. The same job is the
 manual "Backfill Games" workflow (inputs `season`, `week`, `apply`, `max_rows_written`).
+
+## Model
+
+`model/` holds the optimization (`model/README.md`: formulation, configuration, differences from
+football). `model.pipeline.rate_week(store, season, week)` reads a season from the store and
+returns ratings, records and diagnostics without writing anything. Proven against golden outputs of
+the real football code (`tests/test_model_parity.py`). The margin-scale basis is a pending owner
+decision, set in one line in `model/config.py`.
 
 ## Setup
 
