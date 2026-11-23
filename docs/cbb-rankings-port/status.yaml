@@ -3,7 +3,7 @@
 artifact: status
 feature: "cbb-rankings-port"
 mode: "large-initiative"
-stage: "planning"
+stage: "execution"
 owner_skill: work
 
 objective: >
@@ -44,8 +44,8 @@ branching:
   branch_name: "claude/sleepy-tesla-rnjsvt"
 
 summary:
-  current_focus: "Pre-execution checkpoint: waiting for the owner"
-  last_completed: "Plan revised once after reviewer critique"
+  current_focus: "Execution: B5-T1 (site data layer) and B1-T2 (D1 access facts); B1-T1 and the rest of B1 wait on gate G0"
+  last_completed: "Owner chose proceed at the pre-execution checkpoint"
   current_blocker: ""
 
 artifacts:
@@ -135,6 +135,36 @@ agents:
     task: "critique requirements.yaml and plan.yaml against the code"
     last_update: "2026-11-23"
     blocker: ""
+  - id: "frontend-engineer-1"
+    role: "frontend-engineer"
+    task_profile: "implementation"
+    requested_model_tier: "balanced"
+    requested_reasoning: "medium"
+    requested_provider_model: "sonnet"
+    actual_model: ""
+    actual_reasoning: ""
+    routing_enforced: true
+    escalation_count: 0
+    status: "running"
+    stage: "execution"
+    task: "B5-T1: personal-site data layer (sport config, fetch script, conference names)"
+    last_update: "2026-11-23"
+    blocker: ""
+  - id: "platform-engineer-1"
+    role: "platform-engineer"
+    task_profile: "research"
+    requested_model_tier: "balanced"
+    requested_reasoning: "medium"
+    requested_provider_model: "sonnet"
+    actual_model: ""
+    actual_reasoning: ""
+    routing_enforced: true
+    escalation_count: 0
+    status: "running"
+    stage: "execution"
+    task: "B1-T2: verify D1 access facts and recommend the write path"
+    last_update: "2026-11-23"
+    blocker: ""
 
 loops:
   planning_review:
@@ -146,7 +176,7 @@ loops:
 
 checkpoint:
   pre_execution_required: true
-  pre_execution_status: pending
+  pre_execution_status: proceed
   options:
     - proceed
     - revise_plan
@@ -173,6 +203,6 @@ model_routing:
     - "balanced tier resolved to claude-sonnet-5-5 (the map lists Sonnet 5)"
   unresolved_limitations: []
 
-next_action: "Owner chooses proceed, revise plan, narrow scope or stop; gate G0 answers needed before B1"
+next_action: "Integrate B5-T1 and B1-T2 results; start B5-T2; G0 answers (R2 bucket, probe access) still needed from the owner"
 next_recommended_command: "$work"
 user_input_needed: true

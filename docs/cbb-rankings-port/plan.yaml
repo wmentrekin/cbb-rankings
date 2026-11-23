@@ -3,7 +3,7 @@
 artifact: plan
 feature: "cbb-rankings-port"
 mode: "large-initiative"
-status: draft
+status: approved
 owner_skill: work
 based_on: "docs/cbb-rankings-port/requirements.yaml"
 
@@ -268,4 +268,4 @@ review:
 
 checkpoint:
   required_before_execution: true
-  status: pending
+  status: proceed
