@@ -25,6 +25,9 @@ on:
         required: false
         type: string
 
+permissions:
+  contents: read
+
 concurrency:
   # Shared with the weekly workflow: a backfill must not race the scheduled run. An in-flight
   # write finishes rather than being cancelled halfway.
@@ -60,15 +63,15 @@ jobs:
           [ -n "$WEEK" ] && args+=(--week "$WEEK")
           [ -n "$MAX_ROWS_WRITTEN" ] && args+=(--max-rows-written "$MAX_ROWS_WRITTEN")
           [ "$APPLY" = "true" ] && args+=(--apply)
-          # Failures are not masked: the script's exit code (non-zero on a fetch failure, an OVERRIDE_FAILURE
+          # Failures are not masked: the script's exit code (non-zero on a fetch failure, an INGEST_FAILURE, an OVERRIDE_FAILURE
           # or a refused apply) fails the job. tee keeps the summary in the job log either way.
-          uv run python scripts/backfill_games.py "${args[@]}" 2>&1 | tee output.log
+          uv run --frozen python scripts/backfill_games.py "${args[@]}" 2>&1 | tee output.log
       - name: Summary
         if: always()
         run: |
           {
             echo '### Backfill'
             echo '```'
-            grep -E 'BACKFILL_APPLIED|BACKFILL_FAILED|OVERRIDE_FAILURE|DRY RUN .*nothing written' output.log || echo 'no summary line (see the job log)'
+            grep -E 'BACKFILL_APPLIED|BACKFILL_FAILED|INGEST_FAILURE|OVERRIDE_FAILURE|DRY RUN .*nothing written' output.log || echo 'no summary line (see the job log)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
