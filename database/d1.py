@@ -108,19 +108,18 @@ class D1Client(Store):
     # -- reads -------------------------------------------------------------------------------
 
     def query(self, sql: str, params: Sequence[Any] = ()) -> list[dict]:
-        result = self._request("query", {"sql": sql, "params": list(params)})
+        result, _ = self._request("query", {"sql": sql, "params": list(params)})
         return result[0].get("results") or []
 
     def query_rows(self, sql: str, params: Sequence[Any] = ()) -> tuple[list[str], list[list]]:
-        result = self._request("raw", {"sql": sql, "params": list(params)})
+        result, _ = self._request("raw", {"sql": sql, "params": list(params)})
         results = result[0].get("results") or {}
         return list(results.get("columns") or []), list(results.get("rows") or [])
 
     # -- writes ------------------------------------------------------------------------------
 
     def execute(self, sql: str, params: Sequence[Any] = ()) -> WriteStats:
-        result = self._request("query", {"sql": sql, "params": list(params)})
-        return _stats(result)
+        return _stats(*self._request("query", {"sql": sql, "params": list(params)}))
 
     def execute_batch(self, statements: Sequence[tuple[str, Sequence[Any]]]) -> WriteStats:
         """Atomic: D1 rolls back the whole batch if one statement fails.
@@ -131,17 +130,19 @@ class D1Client(Store):
         if not statements:
             return WriteStats()
         body = {"batch": [{"sql": sql, "params": list(params)} for sql, params in statements]}
-        return _stats(self._request("query", body))
+        return _stats(*self._request("query", body))
 
     # -- transport ---------------------------------------------------------------------------
 
-    def _request(self, path: str, body: dict) -> list[dict]:
+    def _request(self, path: str, body: dict) -> tuple[list[dict], int]:
+        """(result, number of retries after a timeout or connection error)."""
         url = f"{self._base}/{path}"
         headers = {
             "Authorization": f"Bearer {self._config.api_token}",
             "Content-Type": "application/json",
         }
         attempt = 0
+        network_retries = 0
         while True:
             retry_after = None
             try:
@@ -151,10 +152,11 @@ class D1Client(Store):
             except (requests.ConnectionError, requests.Timeout, requests.exceptions.ChunkedEncodingError) as exc:
                 failure: D1Error = D1Error(f"D1 request failed: {type(exc).__name__}")
                 retryable = True
+                network_retries += 1
             else:
                 ok, failure, retryable = self._interpret(resp)
                 if ok is not None:
-                    return ok
+                    return ok, network_retries
                 retry_after = _retry_after(resp)
             if not retryable or attempt >= self._max_retries:
                 raise failure
@@ -198,10 +200,10 @@ def _retry_after(resp: Any) -> float | None:
         return None
 
 
-def _stats(result: list[dict]) -> WriteStats:
+def _stats(result: list[dict], network_retries: int = 0) -> WriteStats:
     written = read = 0
     for item in result:
         meta = item.get("meta") or {}
         written += int(meta.get("rows_written") or 0)
         read += int(meta.get("rows_read") or 0)
-    return WriteStats(rows_written=written, rows_read=read)
+    return WriteStats(rows_written=written, rows_read=read, retried_writes=network_retries)

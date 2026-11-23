@@ -40,14 +40,22 @@ class WriteStats:
 
     The local store reports the sqlite3 changed-row count as rows_written (indexes not
     counted) and 0 for rows_read.
+
+    `retried_writes` counts write requests that were re-sent after a timeout or connection
+    error. The first attempt may have committed before the connection dropped, in which case
+    the retry changed nothing and reported 0 rows, so `rows_written` may be UNDER-COUNTED
+    whenever `retried_writes` is non-zero.
     """
 
     rows_written: int = 0
     rows_read: int = 0
+    retried_writes: int = 0
 
     def __add__(self, other: "WriteStats") -> "WriteStats":
         return WriteStats(
-            self.rows_written + other.rows_written, self.rows_read + other.rows_read
+            self.rows_written + other.rows_written,
+            self.rows_read + other.rows_read,
+            self.retried_writes + other.retried_writes,
         )
 
 

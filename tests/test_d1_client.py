@@ -172,3 +172,28 @@ def test_config_from_env(monkeypatch):
     monkeypatch.setenv("CLOUDFLARE_D1_DATABASE_ID", "d")
     monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "proxy-injected")
     assert D1Config.from_env().database_id == "d"
+
+
+# --- retried writes ---------------------------------------------------------------------------
+def test_write_retried_after_a_timeout_is_flagged_in_the_stats():
+    c, _, _ = client(requests.ReadTimeout("slow"), requests.ConnectionError("reset"), ok([], rows_written=0))
+    stats = c.execute("UPDATE t SET a = 1")
+    assert stats == WriteStats(rows_written=0, rows_read=0, retried_writes=2)  # the first attempt may have committed
+
+
+def test_status_retries_and_clean_writes_are_not_flagged():
+    c, _, _ = client(err(429, 7429, "Too many requests"), ok([], rows_written=3))
+    assert c.execute("UPDATE t SET a = 1").retried_writes == 0
+    c, _, _ = client(ok([], rows_written=3))
+    assert c.execute_batch([("A", [])]).retried_writes == 0
+
+
+def test_retried_writes_add_up_across_upsert_chunks():
+    c, _, _ = client(requests.ConnectionError("x"), ok([], 2), ok([], 1))
+    stats = c.upsert("t", [{"id": i, "v": "a"} for i in range(3)], ("id",), chunk_rows=2)
+    assert (stats.rows_written, stats.retried_writes) == (3, 1)
+
+
+def test_reads_do_not_report_anything_extra():
+    c, _, _ = client(requests.ConnectionError("x"), ok([{"a": 1}]))
+    assert c.query("SELECT 1") == [{"a": 1}]
