@@ -5,7 +5,7 @@ ported from `cfb-rankings`. A weekly GitHub Actions job ingests games from
 [CollegeBasketballData](https://collegebasketballdata.com) into Cloudflare D1, solves the model,
 and publishes JSON rankings to R2 for the site.
 
-Status: storage and ingestion. The model and publishing are planned in
+Status: storage, ingestion, result overrides and backfill. The model and publishing are planned in
 `docs/cbb-rankings-port/plan.yaml`.
 
 ## Storage
@@ -67,6 +67,39 @@ calls (1 teams + 1 per 3,000 games; `/games` is capped at 3,000 rows); a weekly 
 call (2 if teams are missing). Every HTTP request sent, retries included, is counted in
 `CbbdClient.calls` and reported in the summary together with `X-CallLimit-Remaining`.
 
+## Overrides
+
+`ingest/game_result_overrides.json` (shipped empty: `{"version": 1, "overrides": []}`) holds
+operator corrections, reviewed in pull requests and re-applied on every run. Two kinds:
+
+```json
+{"kind": "score", "game_id": 401, "season": 2026, "home_team_id": 52, "away_team_id": 99,
+ "home_score": 70, "away_score": 72, "periods": 2, "reason": "Official scorer corrected the final"}
+{"kind": "exclude", "game_id": 402, "season": 2026, "home_team_id": 52, "away_team_id": 721,
+ "reason": "Exhibition against a non-D-I school that the source lists as official"}
+```
+
+`score` re-derives winner, margin and alpha; `exclude` sets `is_rated = 0` (periods is optional).
+Season and team ids must match the stored game or that entry fails with `OVERRIDE_FAILURE` in the
+log (the other entries still apply, and CI should fail on the marker). A re-ingest overwrites an
+overridden game, so `ingest.overrides.apply_overrides(store, season)` must run after every ingest
+and before the model. Details and write budget: `AGENTS.md`.
+
+## Backfill
+
+```
+uv run python scripts/backfill_games.py --season 2026                  # dry run (default)
+uv run python scripts/backfill_games.py --season 2026 --week 3 --apply # write one week
+```
+
+Ingest only, no model. The dry run fetches from the API (it spends calls: 4 for a full season, 1
+for a week, from the quota shared with football) and prints what would be written: rows per table,
+estimated D1 rows written (about 19,000 for a fresh full season), anomalies, warnings, calls and
+quota left. `--apply` writes, re-applies the overrides and prints `BACKFILL_APPLIED season=S
+[week=W]`; it refuses an estimate above `--max-rows-written` (default 40,000; D1's free plan allows
+100,000 per day). Exit is non-zero on a fetch failure or an `OVERRIDE_FAILURE`. The same job is the
+manual "Backfill Games" workflow (inputs `season`, `week`, `apply`, `max_rows_written`).
+
 ## Setup
 
 ```
@@ -75,7 +108,7 @@ uv run pytest -q
 ```
 
 Copy `.env.example` to `.env` for local runs. Secrets (set in the repository settings for
-Actions): `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, `CLOUDFLARE_API_TOKEN`
+Actions): `CBBD_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, `CLOUDFLARE_API_TOKEN`
 (D1 edit permission). Use `CBB_STORE=local` to run against a local sqlite file instead.
 
 ## Migrations
@@ -89,3 +122,4 @@ Add `database/migrations/NNNN_description.sql`, then run the "Apply D1 Migration
 
 - `tests.yml` - pytest on every push and pull request
 - `apply-migrations.yml` - manual D1 migration apply
+- `backfill-games.yml` - manual ingest-only backfill, dry run unless `apply` is ticked

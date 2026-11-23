@@ -18,7 +18,10 @@ convex quadratic program ported from `cfb-rankings`: ingest games from CollegeBa
   `ingest/games.py` - fetch and map; `ingest/derive.py` - pure per-game derivations and
   classification, `AlphaConfig`; `ingest/weeks.py` - seasons table and week logic;
   `ingest/seasons.json` - hand-entered Selection Sundays; `ingest/run.py` - `ingest_season`,
-  `ingest_week`, CLI
+  `ingest_week`, CLI; `ingest/overrides.py` + `ingest/game_result_overrides.json` - operator result
+  overrides; `ingest/planning.py` - no-write `PlanningStore` and `CachingClient` for dry runs
+- `scripts/backfill_games.py` - ingest-only backfill (dry run by default); workflow
+  `.github/workflows/backfill-games.yml`
 - `tests/` - pytest; no network
 - `wrangler.jsonc` - only the `d1_databases` entry (used by `wrangler d1 migrations`)
 
@@ -75,10 +78,51 @@ uv run pytest -q   # tests
   calls. Never log the API key.
 - Tests use `tests/fakes.py` (`FakeApi`, trimmed real-response fixtures); no network.
 
+## Operator tools: overrides and backfill
+
+Overrides (`ingest/game_result_overrides.json`, `{"version": 1, "overrides": [...]}`, shipped empty).
+Two kinds of entry; all keys are required except `periods`, unknown keys are rejected, one entry
+per `game_id`, and `reason` must be a non-empty human explanation:
+
+```json
+{"kind": "score", "game_id": 401, "season": 2026, "home_team_id": 52, "away_team_id": 99,
+ "home_score": 70, "away_score": 72, "periods": 2, "reason": "Official scorer corrected the final"}
+{"kind": "exclude", "game_id": 402, "season": 2026, "home_team_id": 52, "away_team_id": 721,
+ "reason": "Exhibition against a non-D-I school that the source lists as official"}
+```
+
+- `score` sets the scores (both present, whole, not equal) and re-derives winner_team_id, margin
+  and alpha with `ingest.derive.derive_result` from the stored neutral_site; only a stored `final`
+  game can be re-scored. `exclude` sets `is_rated = 0` and leaves scores alone.
+- Season and both team ids are checked against the stored row; a mismatch, a missing game or a bad
+  status fails that entry only: it is logged `OVERRIDE_FAILURE: game_id=... reason=...`, listed in
+  the returned `OverrideSummary.failed`, and the rest still apply. A malformed file raises
+  `OverrideFileError` (also logged with the marker). Entries for other seasons are skipped.
+- ORDERING RULE: ingest upserts rewrite an overridden game from the source, so the weekly
+  orchestration must call `ingest.overrides.apply_overrides(store, season)` right after ingest and
+  before the model reads games (after every `ingest_season`/`ingest_week`, in the backfill too). Any
+  `OVERRIDE_FAILURE` must fail the job (CI greps for the marker or reads `summary.ok`).
+- Write budget: applying is idempotent (a matching row is not written; the upsert has the
+  changed-values guard). An overridden game inside the ingest window costs writes twice per run
+  (ingest overwrites it, the override restores it): about 2 rows for `score`, up to about 6 for
+  `exclude` (two index rows move). Ten overrides are under 100 rows a day of the 100,000.
+
+Backfill (`scripts/backfill_games.py`, workflow "Backfill Games"): ingest only, for `--season S`
+or `--season S --week W`. DRY RUN BY DEFAULT, and the dry run spends API calls (full season 4,
+week 1; shared quota) because it fetches to compute the plan; it reports rows per table
+(new / changed / unchanged), estimated D1 rows written (3 per new game, 1 per team or season
+row, 1 per changed row, plus 2 index rows when week/is_rated change), anomalies, warnings, API
+calls and quota left, and writes nothing (`PlanningStore` rejects every write but `upsert`, which
+it only counts). `--apply` reuses the dry run's responses (no extra calls), writes, applies the
+overrides and prints `BACKFILL_APPLIED season=S [week=W] ...`. It is refused (exit 2) when the
+estimate exceeds `--max-rows-written` (default 40,000; a fresh full season is about 19,000). Exit
+1 on a fetch/ingest failure, an empty fetch, or any `OVERRIDE_FAILURE`. A rerun of an unchanged
+season estimates 1 row (the season's `last_ingested_at`).
+
 ## Secrets (names only)
 
-`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, `CLOUDFLARE_API_TOKEN`; later tasks add
-`CBBD_API_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`,
+`CBBD_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, `CLOUDFLARE_API_TOKEN`; later
+tasks add `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`,
 `PERSONAL_SITE_DEPLOY_HOOK_URL`. Never log or commit values. In cloud agent sessions the token
 variable may hold the placeholder `proxy-injected`; a proxy supplies the real credential.
 
