@@ -44,8 +44,8 @@ branching:
   branch_name: "claude/sleepy-tesla-rnjsvt"
 
 summary:
-  current_focus: "Execution: B5-T1 (site data layer) and B1-T2 (D1 access facts); B1-T1 and the rest of B1 wait on gate G0"
-  last_completed: "Owner chose proceed at the pre-execution checkpoint"
+  current_focus: "Execution: B1-T1 (source probe) and B5-T2 (site components) running; B1-T3 starts when the probe reports"
+  last_completed: "B5-T1 committed and pushed in personal-site (b0480c8); B1-T2 D1 facts recorded in plan.yaml"
   current_blocker: ""
 
 artifacts:
@@ -141,11 +141,11 @@ agents:
     requested_model_tier: "balanced"
     requested_reasoning: "medium"
     requested_provider_model: "sonnet"
-    actual_model: ""
-    actual_reasoning: ""
+    actual_model: "claude-sonnet-5-5"
+    actual_reasoning: "not independently controllable"
     routing_enforced: true
     escalation_count: 0
-    status: "running"
+    status: "done"
     stage: "execution"
     task: "B5-T1: personal-site data layer (sport config, fetch script, conference names)"
     last_update: "2026-11-23"
@@ -156,13 +156,43 @@ agents:
     requested_model_tier: "balanced"
     requested_reasoning: "medium"
     requested_provider_model: "sonnet"
+    actual_model: "claude-sonnet-5-5"
+    actual_reasoning: "not independently controllable"
+    routing_enforced: true
+    escalation_count: 0
+    status: "done"
+    stage: "execution"
+    task: "B1-T2: verify D1 access facts and recommend the write path"
+    last_update: "2026-11-23"
+    blocker: ""
+  - id: "data-engineer-1"
+    role: "data-engineer"
+    task_profile: "research"
+    requested_model_tier: "frontier"
+    requested_reasoning: "high"
+    requested_provider_model: "opus"
     actual_model: ""
     actual_reasoning: ""
     routing_enforced: true
     escalation_count: 0
     status: "running"
     stage: "execution"
-    task: "B1-T2: verify D1 access facts and recommend the write path"
+    task: "B1-T1: probe the CBBD API (40-call budget)"
+    last_update: "2026-11-23"
+    blocker: ""
+  - id: "frontend-engineer-2"
+    role: "frontend-engineer"
+    task_profile: "implementation"
+    requested_model_tier: "balanced"
+    requested_reasoning: "medium"
+    requested_provider_model: "sonnet"
+    actual_model: ""
+    actual_reasoning: ""
+    routing_enforced: true
+    escalation_count: 0
+    status: "running"
+    stage: "execution"
+    task: "B5-T2: shared toolbar, panels and client script"
     last_update: "2026-11-23"
     blocker: ""
 
@@ -206,6 +236,6 @@ model_routing:
     - "balanced tier resolved to claude-sonnet-5-5 (the map lists Sonnet 5)"
   unresolved_limitations: []
 
-next_action: "Integrate B5-T1 and B1-T2 results; start B5-T2; G0 answers (R2 bucket, probe access) still needed from the owner"
+next_action: "On probe report: finalize schema, start B1-T3. On B5-T2 report: verify, push. PRs only after the owner says to open them."
 next_recommended_command: "$work"
 user_input_needed: true

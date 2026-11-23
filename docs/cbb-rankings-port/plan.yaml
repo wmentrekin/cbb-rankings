@@ -21,7 +21,10 @@ approach:
     a fixture that follows the artifact contract and merged only after B4 has published real data.
     The methodology rewrite (B7) comes last.
   key_decisions:
-    - "Storage: Cloudflare D1; schema applied with wrangler d1 migrations; Python reaches it through one thin client module. REST query versus wrangler-applied SQL files is settled by B1-T2."
+    - "Storage: Cloudflare D1; schema applied with wrangler d1 migrations (minimal wrangler.jsonc with only d1_databases; apply --remote --force in Actions). Python reaches it through one thin client module over the REST API."
+    - "D1 write path (B1-T2, from Cloudflare's docs source): POST /query with the batch form, upserts with bound parameters, floor(100 / columns) rows per statement, about 100 statements per request, retry with backoff on 429 and D1 codes 7429/7500. Reads use /raw. The single-JSON-parameter json_each form is tried against the real database and adopted only if it works."
+    - "D1 budgets: 100,000 rows written per day on the free plan and each index adds a written row per insert, so upserts carry a changed-values guard and the backfill reports rows written; 1,200 API requests per 5 minutes; 30 s per request; Time Travel keeps 7 days."
+    - "Tests run migrations against Python's sqlite3; the first run against real D1 checks sqlite_version, parameter type round-trip, batch atomicity and row-write accounting."
     - "Source: CollegeBasketballData, gated by the probe B1-T1. Fallback is ESPN-derived data."
     - "teams holds D-I teams only, per season. An opponent whose id is not in teams for that season is non-D-I and maps to the shared dummy team."
     - "Team id is the key everywhere (ratings, games winner, model variables); names are display only. This removes football's name-collision with the dummy team."
