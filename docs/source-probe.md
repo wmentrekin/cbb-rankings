@@ -310,3 +310,19 @@ Changes to the provisional schema in `plan.yaml`:
    Sunday opener (section 7). Optional `season_label` is derivable (`2026` -> `2025-26`).
 9. Rows where neither side is D-I: none observed; drop them at ingest and log a count.
 10. Site CSP: `img-src` gains `https://cdn.collegefootballdata.com`.
+
+## Corrections (2026-11-23, after review of the ingest)
+
+Findings above are unchanged; these facts were found later and take precedence where they differ.
+
+- Finals without scores DO occur in 2026-27. Two rows are `status: final` with `homePoints` and
+  `awayPoints` both 0 (ids 374609, North Carolina A&T vs Warren Wilson, and 375008,
+  Bethune-Cookman vs Paine), both against non-D-I schools. Ingest stores them with no result and
+  `is_rated = 0` and counts them as the `final_tie` anomaly.
+- Same-pair, same-day duplicate rows can occur: ids 372907 and 378701 are both Loyola Chicago vs
+  Seattle U on 2026-11-23 (ET), listed with the home side reversed. Both were `scheduled` when saved
+  (so neither was a double count yet); ingest keeps only the larger id rated if both ever become
+  played.
+- The source's site quirks (a game listed at the wrong side, or a neutral-site event marked not
+  neutral; for example 213466 and 358311 in 2025-26) are fixed through `site` overrides
+  (`ingest/game_result_overrides.json`), not by ingest.
