@@ -52,7 +52,8 @@ def test_basketball_default_differs_from_football_only_in_solver_and_basis():
 
 def test_margin_scale_basis_is_chosen_in_one_place():
     source = open(config_module.__file__).read()
-    assert source.count("PENDING OWNER DECISION") == 1
+    assert "PENDING OWNER DECISION" not in source  # decided 2026-11-23: the documented formula
+    assert config_module.BASKETBALL_MARGIN_SCALE_BASIS == "margin"
     assert source.count("BASKETBALL_MARGIN_SCALE_BASIS:") == 1
     assert BASKETBALL_DEFAULT.margin_scale_basis == config_module.BASKETBALL_MARGIN_SCALE_BASIS
 
