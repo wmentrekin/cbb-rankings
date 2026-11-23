@@ -1,0 +1,282 @@
+[
+ {
+  "id": 9,
+  "sourceId": "2026",
+  "school": "App State",
+  "abbreviation": "APP",
+  "primaryColor": "000000",
+  "secondaryColor": "ffcd00",
+  "conferenceId": 29,
+  "conference": "Sun Belt",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/2026.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/2026.png"
+  ]
+ },
+ {
+  "id": 13,
+  "sourceId": "2032",
+  "school": "Arkansas State",
+  "abbreviation": "ARST",
+  "primaryColor": "e81018",
+  "secondaryColor": "000000",
+  "conferenceId": 29,
+  "conference": "Sun Belt",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/2032.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/2032.png"
+  ]
+ },
+ {
+  "id": 25,
+  "sourceId": "68",
+  "school": "Boise State",
+  "abbreviation": "BOIS",
+  "primaryColor": "0033a0",
+  "secondaryColor": "fa4616",
+  "conferenceId": 33,
+  "conference": "Pac-12",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/68.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/68.png"
+  ]
+ },
+ {
+  "id": 60,
+  "sourceId": "172",
+  "school": "Cornell",
+  "abbreviation": "COR",
+  "primaryColor": "d60027",
+  "secondaryColor": "101010",
+  "conferenceId": 15,
+  "conference": "Ivy",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/172.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/172.png"
+  ]
+ },
+ {
+  "id": 103,
+  "sourceId": "2755",
+  "school": "Grambling",
+  "abbreviation": "GRAM",
+  "primaryColor": "ee8601",
+  "secondaryColor": "ffd10a",
+  "conferenceId": 25,
+  "conference": "SWAC",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/2755.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/2755.png"
+  ]
+ },
+ {
+  "id": 109,
+  "sourceId": "2272",
+  "school": "High Point",
+  "abbreviation": "HPU",
+  "primaryColor": "b0b7bc",
+  "secondaryColor": "ebebeb",
+  "conferenceId": 9,
+  "conference": "Big South",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/2272.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/2272.png"
+  ]
+ },
+ {
+  "id": 116,
+  "sourceId": "304",
+  "school": "Idaho State",
+  "abbreviation": "IDST",
+  "primaryColor": "ef8c00",
+  "secondaryColor": "e9a126",
+  "conferenceId": 8,
+  "conference": "Big Sky",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/304.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/304.png"
+  ]
+ },
+ {
+  "id": 142,
+  "sourceId": "2335",
+  "school": "Liberty",
+  "abbreviation": "LIB",
+  "primaryColor": "071740",
+  "secondaryColor": "a61f21",
+  "conferenceId": 13,
+  "conference": "CUSA",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/2335.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/2335.png"
+  ]
+ },
+ {
+  "id": 151,
+  "sourceId": "2350",
+  "school": "Loyola Chicago",
+  "abbreviation": "LUC",
+  "primaryColor": "9d1244",
+  "secondaryColor": null,
+  "conferenceId": 1,
+  "conference": "A-10",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/2350.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/2350.png"
+  ]
+ },
+ {
+  "id": 159,
+  "sourceId": "2379",
+  "school": "Maryland Eastern Shore",
+  "abbreviation": "UMES",
+  "primaryColor": "5c2301",
+  "secondaryColor": "b5b7ba",
+  "conferenceId": 18,
+  "conference": "MEAC",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/2379.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/2379.png"
+  ]
+ },
+ {
+  "id": 166,
+  "sourceId": "2771",
+  "school": "Merrimack",
+  "abbreviation": "MRMK",
+  "primaryColor": "2f4f93",
+  "secondaryColor": "e8c535",
+  "conferenceId": 16,
+  "conference": "Metro",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/2771.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/2771.png"
+  ]
+ },
+ {
+  "id": 208,
+  "sourceId": "2459",
+  "school": "Northern Illinois",
+  "abbreviation": "NIU",
+  "primaryColor": "F1122C",
+  "secondaryColor": "cc0000",
+  "conferenceId": 14,
+  "conference": "Horizon",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/2459.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/2459.png"
+  ]
+ },
+ {
+  "id": 213,
+  "sourceId": "87",
+  "school": "Notre Dame",
+  "abbreviation": "ND",
+  "primaryColor": "0c2340",
+  "secondaryColor": "c99700",
+  "conferenceId": 2,
+  "conference": "ACC",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/87.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/87.png"
+  ]
+ },
+ {
+  "id": 262,
+  "sourceId": "2547",
+  "school": "Seattle U",
+  "abbreviation": "SEA",
+  "primaryColor": "BF2E1A",
+  "secondaryColor": "c2c3c0",
+  "conferenceId": 31,
+  "conference": "WCC",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/2547.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/2547.png"
+  ]
+ },
+ {
+  "id": 276,
+  "sourceId": "253",
+  "school": "Southern Utah",
+  "abbreviation": "SUU",
+  "primaryColor": "c72026",
+  "secondaryColor": "000000",
+  "conferenceId": 8,
+  "conference": "Big Sky",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/253.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/253.png"
+  ]
+ },
+ {
+  "id": 320,
+  "sourceId": "2430",
+  "school": "UNC Greensboro",
+  "abbreviation": "UNCG",
+  "primaryColor": "003559",
+  "secondaryColor": "ffd90a",
+  "conferenceId": 26,
+  "conference": "SoCon",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/2430.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/2430.png"
+  ]
+ },
+ {
+  "id": 338,
+  "sourceId": "222",
+  "school": "Villanova",
+  "abbreviation": "VILL",
+  "primaryColor": "00205b",
+  "secondaryColor": "13b5ea",
+  "conferenceId": 7,
+  "conference": "Big East",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/222.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/222.png"
+  ]
+ },
+ {
+  "id": 348,
+  "sourceId": "2717",
+  "school": "Western Carolina",
+  "abbreviation": "WCU",
+  "primaryColor": "492F91",
+  "secondaryColor": "bf9e70",
+  "conferenceId": 26,
+  "conference": "SoCon",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/2717.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/2717.png"
+  ]
+ },
+ {
+  "id": 354,
+  "sourceId": "2737",
+  "school": "Winthrop",
+  "abbreviation": "WIN",
+  "primaryColor": "9e0b0e",
+  "secondaryColor": "fdb41e",
+  "conferenceId": 9,
+  "conference": "Big South",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/2737.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/2737.png"
+  ]
+ },
+ {
+  "id": 362,
+  "sourceId": "2511",
+  "school": "Queens University",
+  "abbreviation": "QUC",
+  "primaryColor": "192C66",
+  "secondaryColor": "857040",
+  "conferenceId": 3,
+  "conference": "ASUN",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/2511.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/2511.png"
+  ]
+ }
+]
