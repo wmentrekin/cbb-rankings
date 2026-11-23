@@ -56,10 +56,16 @@ def fetch_games_range(client, season: int, start: datetime, end: datetime, cap: 
     return list(games.values())
 
 
+def season_window(season: int) -> tuple[datetime, datetime]:
+    """UTC range a full-season fetch covers: October 1 of the previous year through May 31 (the
+    NCAA final is in early April)."""
+    return _utc(date(season - 1, 10, 1)), _utc(date(season, 5, 31), 23)
+
+
 def fetch_season_games(client, season: int, cap: int = GAMES_CAP) -> list[dict[str, Any]]:
-    """A whole season: October 1 of the previous year through May 31 (the NCAA final is in early
-    April). 4 calls in total with the teams call for a 6,300-game season."""
-    return fetch_games_range(client, season, _utc(date(season - 1, 10, 1)), _utc(date(season, 5, 31), 23), cap)
+    """A whole season. 4 calls in total with the teams call for a 6,300-game season."""
+    start, end = season_window(season)
+    return fetch_games_range(client, season, start, end, cap)
 
 
 def week_window(season_row: SeasonRow, week: int, lookback_days: int = LOOKBACK_DAYS) -> tuple[datetime, datetime]:

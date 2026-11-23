@@ -75,3 +75,31 @@ def test_caching_client_spends_each_request_once():
     first.clear()  # mutating a response must not poison the cache
     assert len(cached.get("/teams", {"season": 2026})) == 59
     assert cached.calls == api.calls == 1 and cached.quota_remaining == 899
+
+
+def test_plan_counts_the_guards_neutralized_and_duplicate_rows(store):
+    from tests.fakes import FakeApi, load, season_2027_api, with_scores
+    run.ingest_season(store, 2026, season_2026_api(), now=lambda: datetime(2026, 4, 7, tzinfo=timezone.utc))
+    games = [g for g in load("cbbd_games_2026.json") if g["id"] != 212784]  # deleted upstream
+    planner = PlanningStore(store)
+    summary = run.ingest_season(planner, 2026, FakeApi({2026: load("cbbd_teams_2026.json")}, {2026: games}),
+                                now=lambda: datetime(2026, 4, 14, tzinfo=timezone.utc))
+    assert summary.anomalies == {"absent_from_source": 1}
+    assert planner.plans["games"].changed == 1 and planner.plans["games"].estimated_rows_written == 3  # is_rated is indexed
+    assert store.query("SELECT is_rated FROM games WHERE id = 212784")[0]["is_rated"] == 1  # a dry run wrote nothing
+
+    api = season_2027_api()
+    with_scores(api.games[2027], 372907, 70, 65)  # SYNTHETIC
+    with_scores(api.games[2027], 378701, 61, 66)  # SYNTHETIC
+    planner = PlanningStore(store)
+    plan = run.ingest_season(planner, 2027, api)
+    assert plan.anomalies["duplicate_rated_pair"] == 1
+    # the loser is planned once, already unrated: 3 rows (new), not a new row plus a change
+    assert planner.plans["games"].new == 14 and planner.plans["games"].changed == 0
+    assert planner.plans["games"].estimated_rows_written == 14 * 3
+
+
+def test_override_restore_estimate_by_kind():
+    from ingest.planning import override_restore_writes
+    assert override_restore_writes([{"kind": "score"}, {"kind": "site"}, {"kind": "exclude"}]) == 1 + 1 + 3
+    assert override_restore_writes([]) == 0

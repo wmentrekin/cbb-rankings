@@ -92,6 +92,11 @@ def load_selection_sunday(season: int, path: Path = SEASONS_FILE) -> date:
         selection_sunday = date.fromisoformat(entry["selection_sunday"])
     except (KeyError, ValueError) as exc:
         raise SeasonConfigError(f"season {season} in {path.name} has no valid selection_sunday") from exc
+    if selection_sunday.weekday() != 6:
+        raise SeasonConfigError(
+            f"season {season} in {path.name}: selection_sunday {selection_sunday} is a "
+            f"{selection_sunday.strftime('%A')}, not a Sunday; fix the date"
+        )
     if entry.get("provisional"):
         log.warning(
             "season %s Selection Sunday %s is PROVISIONAL (unconfirmed); is_rated and the last "

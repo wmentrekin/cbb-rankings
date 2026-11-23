@@ -10,7 +10,16 @@ the API calls once.
 
 Estimate: a new row writes 1 row plus one per index (`games` has two); a changed row writes 1,
 plus the index rows when an indexed column changed. D1's own `rows_written` meta is the truth;
-this is the figure used to guard against a bulk run that would eat the daily budget.
+this is the figure used to guard against a bulk run that would eat the daily budget. The insert
+and no-op costs are verified against real D1; the CHANGED-row cost is a model that has not
+been checked against real D1.
+
+Everything the ingest does to stored games (the rows it re-derives, the absent games it
+neutralizes, the duplicates it unrates) goes through `upsert`, so the plan counts them too. The
+operator overrides run after the ingest and are not simulated: the caller adds
+`override_restore_writes(entries)` for them. An overridden game that differs from the source
+shows up as "changed" in the plan (the ingest would overwrite it) and the restore is the second
+write.
 """
 from __future__ import annotations
 
@@ -23,6 +32,13 @@ from database.store import DEFAULT_CHUNK_ROWS, Store, WriteStats, check_identifi
 
 INDEXES_PER_TABLE = {"games": 2}
 INDEXED_COLUMNS = {"games": frozenset({"season", "week", "is_rated"})}
+# Rows an override entry writes when it restores its game after the ingest: one row, plus the two
+# index rows for `exclude` because is_rated is indexed. `score` and `site` touch no indexed column.
+OVERRIDE_RESTORE_WRITES = {"score": 1, "site": 1, "exclude": 3}
+
+
+def override_restore_writes(entries: Sequence[dict]) -> int:
+    return sum(OVERRIDE_RESTORE_WRITES[e["kind"]] for e in entries)
 
 
 class DryRunWriteError(RuntimeError):

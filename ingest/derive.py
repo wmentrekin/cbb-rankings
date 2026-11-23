@@ -30,6 +30,11 @@ UNKNOWN_STATUS = "unknown_status"
 UNKNOWN_SEASON_TYPE = "unknown_season_type"
 NON_D1_HAS_CONFERENCE = "non_d1_side_has_conference"
 D1_MISSING_CONFERENCE = "d1_side_missing_conference"
+# Found against the stored games rather than in one source row (see ingest.run).
+DUPLICATE_RATED_PAIR = "duplicate_rated_pair"  # same teams, same date, both rated and played
+ABSENT_FROM_SOURCE = "absent_from_source"  # stored game missing from a complete season fetch
+# A final stored without a result (scores missing or equal) is also never rated.
+UNPLAYED_FINAL_CODES = frozenset({FINAL_SCORE_MISSING, FINAL_TIE})
 
 
 @dataclass(frozen=True)
@@ -55,8 +60,14 @@ class GameOutcome:
 
 
 def eastern_date(start_date: str) -> date:
-    """US/Eastern calendar date of an ISO 8601 UTC timestamp such as 2025-11-04T00:00:00.000Z."""
-    return datetime.fromisoformat(start_date).astimezone(EASTERN).date()
+    """US/Eastern calendar date of an ISO 8601 timestamp that carries an offset, such as
+    2025-11-04T00:00:00.000Z. A naive timestamp or a bare date is rejected (ValueError): it
+    would be read as the machine's local time, which silently shifts the game's date."""
+    moment = datetime.fromisoformat(start_date)
+    if moment.tzinfo is None:
+        kind = "bare date" if len(start_date.strip()) <= 10 else "timezone-naive timestamp"
+        raise ValueError(f"{kind} {start_date!r}: an explicit UTC offset (such as Z) is required")
+    return moment.astimezone(EASTERN).date()
 
 
 def is_rated(season_type: str, game_date: date, selection_sunday: date) -> bool:
@@ -86,7 +97,7 @@ def derive_result(
 
     played = status "final" with both scores present and unequal. Anything else stores NULL
     scores, margin, winner and alpha (never 0-0). A final that fails the score checks is an
-    anomaly and is stored as not played.
+    anomaly and is stored as not played (derive_game also stores it with is_rated = 0).
     """
     unplayed = {"home_score": None, "away_score": None, "margin": None, "winner_team_id": None, "alpha": None}
     if status != "final":
@@ -163,9 +174,10 @@ def derive_game(
         raw["status"], home_id, away_id, raw.get("homePoints"), raw.get("awayPoints"), neutral, alpha_cfg
     )
     if code:
-        note(code, f"final game stored as not played (scores {raw.get('homePoints')!r}-{raw.get('awayPoints')!r})")
+        note(code, f"final game stored as not played and not rated (scores {raw.get('homePoints')!r}-{raw.get('awayPoints')!r})")
 
     period_points = raw.get("homePeriodPoints")
+    rated = is_rated(raw["seasonType"], game_date, selection_sunday) and code is None
     out.row = {
         "id": raw["id"],
         "source_id": raw.get("sourceId"),
@@ -177,7 +189,7 @@ def derive_game(
         "tournament": raw.get("tournament"),
         "game_type": raw["gameType"],
         "game_notes": raw.get("gameNotes"),
-        "is_rated": int(is_rated(raw["seasonType"], game_date, selection_sunday)),
+        "is_rated": int(rated),
         "status": raw["status"],
         "home_team_id": home_id,
         "home_team": raw["homeTeam"],

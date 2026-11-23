@@ -45,3 +45,20 @@ class FakeApi:
 
 def season_2026_api(cap: int = GAMES_CAP) -> FakeApi:
     return FakeApi({2026: load("cbbd_teams_2026.json")}, {2026: load("cbbd_games_2026.json")}, cap)
+
+
+def season_2027_api(extra_games: list | None = None, cap: int = GAMES_CAP) -> FakeApi:
+    """The 2026-27 fixture plus the real rows trimmed from the probe that exercise the gates: two
+    0-0 finals against non-D-I schools (374609, 375008) and the second of the Loyola Chicago /
+    Seattle U pair (378701; the first, 372907, is already in the base fixture). The teams are the
+    base fixture plus North Carolina A&T and Bethune-Cookman."""
+    teams = load("cbbd_teams_2027.json") + load("cbbd_teams_2027_extra.json")
+    games = load("cbbd_games_2027.json") + load("cbbd_games_2027_anomalies.json") + (extra_games or [])
+    return FakeApi({2027: teams}, {2027: games}, cap)
+
+
+def with_scores(games: list, game_id: int, home: int, away: int) -> None:
+    """SYNTHETIC: the source has no result for these games yet; fill one in to build a test case."""
+    for g in games:
+        if g["id"] == game_id:
+            g.update(status="final", homePoints=home, awayPoints=away)

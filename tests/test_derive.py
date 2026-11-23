@@ -225,3 +225,38 @@ def test_week_of_receives_the_eastern_date():
     seen = []
     derive_one(GAMES[212802], week_of=lambda d: seen.append(d) or 1)
     assert seen == [date(2025, 11, 3)]
+
+
+# --- timestamps without an offset, finals without a result ---------------------------------
+@pytest.mark.parametrize("value", ["2025-11-04T00:00:00", "2025-11-04T00:00:00.000", "2025-11-04"])
+def test_eastern_date_rejects_naive_timestamps_and_bare_dates(value):
+    with pytest.raises(ValueError, match="UTC offset"):
+        derive.eastern_date(value)
+
+
+def test_eastern_date_accepts_z_and_explicit_offsets():
+    assert derive.eastern_date("2025-11-04T00:00:00.000Z") == date(2025, 11, 3)
+    assert derive.eastern_date("2025-11-04T00:00:00+00:00") == date(2025, 11, 3)
+    assert derive.eastern_date("2025-11-03T19:00:00-05:00") == date(2025, 11, 3)
+
+
+def test_naive_start_date_makes_a_malformed_row_not_a_silent_local_date():
+    raw = copy.deepcopy(next(g for g in load("cbbd_games_2026.json") if g["id"] == 212784))
+    raw["startDate"] = "2025-11-04T00:00:00"
+    out = derive.derive_game(
+        raw, season=2026, d1_ids={t["id"] for t in load("cbbd_teams_2026.json")},
+        selection_sunday=date(2026, 3, 15), week_of=lambda d: 1,
+    )
+    assert out.row is None and out.anomalies == {"malformed_row": 1}
+
+
+@pytest.mark.parametrize("scores", [(0, 0), (None, 70), (70, 70)])
+def test_final_without_a_result_is_unrated_even_in_the_rated_window(scores):
+    raw = copy.deepcopy(next(g for g in load("cbbd_games_2026.json") if g["id"] == 212784))
+    raw["homePoints"], raw["awayPoints"] = scores
+    out = derive.derive_game(
+        raw, season=2026, d1_ids={t["id"] for t in load("cbbd_teams_2026.json")},
+        selection_sunday=date(2026, 3, 15), week_of=lambda d: 1,
+    )
+    assert out.row["status"] == "final" and out.row["winner_team_id"] is None and out.row["is_rated"] == 0
+    assert sum(out.anomalies.values()) == 1

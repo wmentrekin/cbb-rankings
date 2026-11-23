@@ -152,3 +152,16 @@ def test_malformed_entry(tmp_path):
 def test_today_et_uses_eastern_calendar_date():
     from datetime import datetime, timezone
     assert weeks.today_et(datetime(2026, 3, 16, 3, 0, tzinfo=timezone.utc)) == date(2026, 3, 15)
+
+
+def test_selection_sunday_must_be_a_sunday(tmp_path):
+    path = tmp_path / "s.json"
+    path.write_text(json.dumps({"2030": {"selection_sunday": "2030-03-18"}, "2031": {"selection_sunday": "2031-03-16"}}))
+    assert load_selection_sunday(2031, path) == date(2031, 3, 16)  # a Sunday
+    with pytest.raises(SeasonConfigError, match="Monday, not a Sunday"):
+        load_selection_sunday(2030, path)
+
+
+def test_every_shipped_selection_sunday_is_a_sunday():
+    for season in json.loads(weeks.SEASONS_FILE.read_text()):
+        assert load_selection_sunday(int(season)).weekday() == 6
