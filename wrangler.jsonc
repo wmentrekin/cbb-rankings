@@ -1,0 +1,10 @@
+{
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cbb-rankings",
+      "database_id": "4670facc-438e-40ce-9841-b4626c6ca3f0",
+      "migrations_dir": "database/migrations"
+    }
+  ]
+}
