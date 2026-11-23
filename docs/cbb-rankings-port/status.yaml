@@ -44,8 +44,8 @@ branching:
   branch_name: "claude/sleepy-tesla-rnjsvt"
 
 summary:
-  current_focus: "Execution: B1-T3 (scaffold, schema, storage client) and B5-T2 (site components) running"
-  last_completed: "B1-T1 probe: CBBD usable, non-D-I games present and identifiable; schema finalized in plan.yaml"
+  current_focus: "Execution: B2-T2 and B3-T1 running; B5 implemented and under review; B1 complete"
+  last_completed: "B1-T3 (5c251c2), B2-T1 (e10840e) in cbb-rankings; B5-T2 (004c922) in personal-site; all pushed"
   current_blocker: ""
 
 artifacts:
@@ -186,16 +186,76 @@ agents:
     requested_model_tier: "balanced"
     requested_reasoning: "medium"
     requested_provider_model: "sonnet"
+    actual_model: "claude-sonnet-5-5"
+    actual_reasoning: "not independently controllable"
+    routing_enforced: true
+    escalation_count: 0
+    status: "done"
+    stage: "execution"
+    task: "B5-T2: shared toolbar, panels and client script"
+    last_update: "2026-11-23"
+    blocker: ""
+  - id: "data-engineer-2"
+    role: "data-engineer"
+    task_profile: "implementation"
+    requested_model_tier: "balanced"
+    requested_reasoning: "medium"
+    requested_provider_model: "sonnet"
+    actual_model: "claude-sonnet-5-5"
+    actual_reasoning: "not independently controllable"
+    routing_enforced: true
+    escalation_count: 0
+    status: "done"
+    stage: "execution"
+    task: "B1-T3: scaffold, D1 schema and storage client"
+    last_update: "2026-11-23"
+    blocker: ""
+  - id: "data-engineer-3"
+    role: "data-engineer"
+    task_profile: "implementation"
+    requested_model_tier: "balanced"
+    requested_reasoning: "medium"
+    requested_provider_model: "sonnet"
+    actual_model: "claude-sonnet-5-5"
+    actual_reasoning: ""
+    routing_enforced: true
+    escalation_count: 0
+    status: "done"
+    stage: "execution"
+    task: "B2-T1: ingestion core (53ef5cc, f26f88e, e10840e)"
+    last_update: "2026-11-23"
+    blocker: ""
+  - id: "data-scientist-1"
+    role: "data-scientist"
+    task_profile: "implementation"
+    requested_model_tier: "balanced"
+    requested_reasoning: "medium"
+    requested_provider_model: "sonnet"
     actual_model: ""
     actual_reasoning: ""
     routing_enforced: true
     escalation_count: 0
     status: "running"
     stage: "execution"
-    task: "B5-T2: shared toolbar, panels and client script"
+    task: "B3-T1: frozen football reference, fixture, goldens (worktree work/cbb-model)"
     last_update: "2026-11-23"
     blocker: ""
-  - id: "data-engineer-2"
+  - id: "reviewer-2"
+    role: "reviewer"
+    task_profile: "review"
+    requested_model_tier: "balanced"
+    requested_reasoning: "medium"
+    requested_provider_model: "sonnet"
+    actual_model: ""
+    actual_reasoning: ""
+    routing_enforced: true
+    escalation_count: 0
+    status: "running"
+    stage: "verification"
+    task: "review B5 commits in personal-site"
+    last_update: "2026-11-23"
+    blocker: ""
+  - id: "data-engineer-4"
     role: "data-engineer"
     task_profile: "implementation"
     requested_model_tier: "balanced"
@@ -207,7 +267,7 @@ agents:
     escalation_count: 0
     status: "running"
     stage: "execution"
-    task: "B1-T3: scaffold, D1 schema and storage client"
+    task: "B2-T2: overrides and backfill"
     last_update: "2026-11-23"
     blocker: ""
 
@@ -252,6 +312,6 @@ model_routing:
     - "balanced tier resolved to claude-sonnet-5-5 (the map lists Sonnet 5)"
   unresolved_limitations: []
 
-next_action: "On probe report: finalize schema, start B1-T3. On B5-T2 report: verify, push. PRs only after the owner says to open them."
+next_action: "Merge work/cbb-model after B3-T1, start B3-T2; act on B5 review; PRs wait for the owner to ask"
 next_recommended_command: "$work"
 user_input_needed: true
