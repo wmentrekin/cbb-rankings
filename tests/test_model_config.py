@@ -33,19 +33,21 @@ def test_football_compat_equals_every_football_constant():
     assert FOOTBALL_COMPAT.solver == "OSQP"  # what CVXPY chose for the goldens
     assert FOOTBALL_COMPAT.margin_scale_basis == "alpha"  # football's actual behavior
     assert FOOTBALL_COMPAT.accept_inaccurate is False
+    assert FOOTBALL_COMPAT.flat_rating_rule == "solver"  # quirk 13: whatever the solver returns
 
 
 def test_every_config_field_is_covered_by_the_pin():
-    pinned = set(FOOTBALL_VALUES) | {"alpha", "solver", "margin_scale_basis", "accept_inaccurate"}
+    pinned = set(FOOTBALL_VALUES) | {"alpha", "solver", "margin_scale_basis", "accept_inaccurate", "flat_rating_rule"}
     assert {f.name for f in dataclasses.fields(ModelConfig)} == pinned
 
 
-def test_basketball_default_differs_from_football_only_in_solver_and_basis():
+def test_basketball_default_differs_from_football_only_in_solver_basis_and_flat_rule():
     differing = {
         f.name for f in dataclasses.fields(ModelConfig)
         if getattr(BASKETBALL_DEFAULT, f.name) != getattr(FOOTBALL_COMPAT, f.name)
     }
-    assert differing <= {"solver", "margin_scale_basis"}
+    assert differing == {"solver", "margin_scale_basis", "flat_rating_rule"}
+    assert BASKETBALL_DEFAULT.flat_rating_rule == "min_feasible"
     assert BASKETBALL_DEFAULT.solver == "CLARABEL" != FOOTBALL_COMPAT.solver
     assert BASKETBALL_DEFAULT.accept_inaccurate is False
 
@@ -82,6 +84,8 @@ def test_week_must_be_an_int_at_least_one(week):
     {"margin_scale_basis": "median"},
     {"solver": ""},
     {"accept_inaccurate": "yes"},
+    {"flat_rating_rule": "max"},
+    {"flat_rating_rule": "min_feasible", "gamma_loss": 0},
 ])
 def test_invalid_configs_are_rejected(bad):
     with pytest.raises(ModelConfigError):

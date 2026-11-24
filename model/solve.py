@@ -11,6 +11,12 @@ subject to r_min <= r_t <= r_max and r_lower_min <= r_lower <= r_lower_max. This
 program term for term; the only difference in construction is that the ~6,000 `pos(...)**2`
 terms are built as three matrix expressions instead of scalar by scalar, which cuts CVXPY
 canonicalization from seconds to well under one second (README.md, "Parity").
+
+Undetermined ratings (README.md, "Undetermined ratings"). With lambda = 0 a team with no loss has
+no term that pins its rating, and r_lower is pinned only by an active lower-division hinge. Under
+`flat_rating_rule="min_feasible"` those coordinates are set, after the solve, to their least value
+over the whole optimal set, in closed form from the determined ratings; every other rating is left
+exactly as solved and the objective is verified unchanged.
 """
 from __future__ import annotations
 
@@ -30,10 +36,18 @@ class ModelSolveError(RuntimeError):
     """The solver did not return an acceptable optimal solution."""
 
 
+# The "min_feasible" adjustment must leave the objective at the first-stage optimum. In exact
+# arithmetic it changes only hinges that are zero at every optimum (plus the residue the solver
+# leaves on them, of order gamma_margin * eps^2 for a solver accuracy eps), so the allowance is
+# tight: relative to the objective, with an absolute floor for objectives near zero.
+FLAT_OBJECTIVE_RTOL = 1e-8
+FLAT_OBJECTIVE_ATOL = 1e-8
+
+
 @dataclass(frozen=True)
 class SolveResult:
     ratings: dict[int, float]  # D-I teams only; the dummy team is never here
-    r_lower: float  # the dummy rating; flat (solver-dependent) when no lower-division loss is active
+    r_lower: float  # the dummy rating; flat when no lower-division hinge is active (least value under "min_feasible")
     objective: float
     margin_term: float
     loss_rate_term: float
@@ -55,7 +69,46 @@ class SolveResult:
     n_lower_losses: int
     n_default_priors: int = 0
     n_flat_teams: int = 0  # teams with no losses: their rating is undetermined when lam == 0
+    flat_rating_rule: str = "solver"
+    # Teams whose rating the objective leaves undetermined in THIS solve (no loss and lam == 0);
+    # empty when lam > 0. Under "min_feasible" their ratings are the least optimal values.
+    flat_team_ids: tuple[int, ...] = ()
+    max_flat_adjustment: float = 0.0  # largest |published - solver| over flat_team_ids (0 under "solver")
+    r_lower_adjustment: float = 0.0  # |published r_lower - solver r_lower| (0 under "solver")
+    flat_objective_change: float = 0.0  # objective after the adjustment minus before (verified ~0)
     warnings: list[str] = field(default_factory=list)
+
+
+def _objective_terms(rv, r_low, *, loser_idx, winner_idx, demand, loss_rate, low_idx, low_demand, lam, prior_vec, config):
+    """(margin, loss_rate, lower, prior) term values at a point, in plain numpy."""
+    margin_term = float(config.gamma_margin * np.sum(np.maximum(0.0, rv[loser_idx] + demand - rv[winner_idx]) ** 2))
+    loss_term = float(config.gamma_loss * np.sum((loss_rate * rv) ** 2))
+    lower_term = float(config.gamma_lower * np.sum(np.maximum(0.0, rv[low_idx] + low_demand - r_low) ** 2))
+    prior_term = float(lam * np.sum((rv - prior_vec) ** 2)) if lam > 0 else 0.0
+    return margin_term, loss_term, lower_term, prior_term
+
+
+def _least_optimal(rv, r_low, flat, *, loser_idx, winner_idx, demand, low_idx, low_demand, config):
+    """The least optimal value of every undetermined coordinate, given the determined ones.
+
+    A flat team appears only as the WINNER of hinges whose loser is determined, so given the
+    determined ratings its part of the objective, gamma_margin * sum pos(r_loser + d - r_team)^2,
+    is non-increasing in its own rating and is zero from T = max(r_loser + d) on: its optimal set is
+    [max(T, r_min), r_max] when T < r_max, and just {r_max} otherwise (the rating is then
+    determined, at the bound, and the solver's value is kept like every other determined rating).
+    With no D-I win, T = -inf and the least value is r_min. r_lower is the same with the
+    lower-division hinges, whose teams are all determined. README.md, "Undetermined ratings", has
+    the proof."""
+    threshold = np.full(len(rv), -np.inf)
+    if config.gamma_margin > 0 and len(winner_idx):
+        np.maximum.at(threshold, winner_idx, rv[loser_idx] + demand)
+    out = rv.copy()
+    free = flat & (threshold < config.r_max)  # flat and not pinned at r_max
+    out[free] = np.maximum(threshold[free], config.r_min)
+    lower_threshold = float(np.max(rv[low_idx] + low_demand)) if config.gamma_lower > 0 and len(low_idx) else -np.inf
+    if lower_threshold < config.r_lower_max:
+        r_low = max(lower_threshold, config.r_lower_min)
+    return out, float(r_low)
 
 
 def _margin_scale(games: Sequence[Game], config: ModelConfig) -> tuple[float, float]:
@@ -116,6 +169,12 @@ def solve(
     low_idx = np.array([index[x.team] for x in lower_division_losses], dtype=int)
     low_demand = np.array([x.margin * x.alpha for x in lower_division_losses], dtype=float)
     n_low = len(lower_division_losses)
+    if config.flat_rating_rule == "min_feasible":
+        # The closed form needs every team that loses a game to carry a loss-rate term.
+        losers = np.union1d(loser_idx, low_idx).astype(int)
+        no_loss = losers[loss_rate[losers] == 0]
+        if len(no_loss):
+            raise ValueError(f"records show no loss for teams that lost a game: {[teams[i] for i in no_loss[:5]]}")
 
     prior_vec = np.full(n, float(config.default_prior))
     n_default = 0
@@ -162,10 +221,30 @@ def solve(
 
     rv = np.asarray(r.value, dtype=float)
     r_low = float(r_lower.value)
-    margin_term = float(config.gamma_margin * np.sum(np.maximum(0.0, rv[loser_idx] + demand - rv[winner_idx]) ** 2)) if m else 0.0
-    loss_term = float(config.gamma_loss * np.sum((loss_rate * rv) ** 2))
-    lower_term = float(config.gamma_lower * np.sum(np.maximum(0.0, rv[low_idx] + low_demand - r_low) ** 2)) if n_low else 0.0
-    prior_term = float(lam * np.sum((rv - prior_vec) ** 2)) if lam > 0 else 0.0
+    shape = dict(loser_idx=loser_idx, winner_idx=winner_idx, demand=demand, low_idx=low_idx, low_demand=low_demand)
+    term_args = dict(**shape, loss_rate=loss_rate, lam=lam, prior_vec=prior_vec, config=config)
+    terms_first = _objective_terms(rv, r_low, **term_args)
+
+    # Undetermined coordinates: no loss-rate term and no prior term. With lam > 0 there are none.
+    flat = (loss_rate == 0) if lam == 0 else np.zeros(n, dtype=bool)
+    max_adjust = lower_adjust = objective_change = 0.0
+    if config.flat_rating_rule == "min_feasible":
+        solved_rv, solved_low = rv, r_low
+        rv, r_low = _least_optimal(solved_rv, solved_low, flat, **shape, config=config)
+        terms_final = _objective_terms(rv, r_low, **term_args)
+        objective_change = sum(terms_final) - sum(terms_first)
+        if abs(objective_change) > FLAT_OBJECTIVE_ATOL + FLAT_OBJECTIVE_RTOL * abs(sum(terms_first)):
+            raise ModelSolveError(
+                f"min_feasible adjustment changed the objective by {objective_change:.3e} "
+                f"(from {sum(terms_first):.10g}); the first-stage solution is not optimal enough"
+            )
+        if not np.array_equal(rv[~flat], solved_rv[~flat]):
+            raise ModelSolveError("min_feasible adjustment moved a determined rating")
+        max_adjust = float(np.max(np.abs(rv[flat] - solved_rv[flat]), initial=0.0))
+        lower_adjust = abs(r_low - solved_low)
+        margin_term, loss_term, lower_term, prior_term = terms_final
+    else:
+        margin_term, loss_term, lower_term, prior_term = terms_first
 
     warnings: list[str] = []
     if problem.status != cp.OPTIMAL:
@@ -195,5 +274,10 @@ def solve(
         n_lower_losses=n_low,
         n_default_priors=n_default,
         n_flat_teams=int(np.sum(wins_losses[:, 1] == 0)),
+        flat_rating_rule=config.flat_rating_rule,
+        flat_team_ids=tuple(teams[i] for i in np.flatnonzero(flat)),
+        max_flat_adjustment=max_adjust,
+        r_lower_adjustment=lower_adjust,
+        flat_objective_change=objective_change,
         warnings=warnings,
     )

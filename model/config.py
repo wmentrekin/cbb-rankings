@@ -2,7 +2,7 @@
 
 `FOOTBALL_COMPAT` carries football's values exactly (cfb-rankings @ 8ab8201) and is what the
 parity tests run. `BASKETBALL_DEFAULT` is what production runs; it differs from football in
-exactly two fields, the solver and the margin-scale basis (a test pins this).
+exactly three fields, the solver, the margin-scale basis and the flat-rating rule (a test pins this).
 """
 from __future__ import annotations
 
@@ -13,6 +13,11 @@ from typing import Literal
 from ingest.derive import DEFAULT_ALPHA, AlphaConfig
 
 MarginScaleBasis = Literal["margin", "alpha"]
+# How a rating the objective leaves undetermined is chosen (model/README.md, "Undetermined ratings"):
+#   "solver":       whatever the solver returns (football's behavior, reference quirk 13).
+#   "min_feasible": the least value among all optimal solutions (owner decision): an unbeaten team is
+#                   rated just high enough to explain its wins by their margins.
+FlatRatingRule = Literal["solver", "min_feasible"]
 
 # The ONE place the basketball margin-scale basis is chosen.
 #   "margin": the documented formula, median margin of victory over D-I vs D-I played games.
@@ -55,6 +60,7 @@ class ModelConfig:
     solver: str = BASKETBALL_SOLVER
     accept_inaccurate: bool = False
     margin_scale_basis: MarginScaleBasis = BASKETBALL_MARGIN_SCALE_BASIS
+    flat_rating_rule: FlatRatingRule = "min_feasible"
 
     def __post_init__(self) -> None:
         def need(ok: bool, msg: str) -> None:
@@ -84,6 +90,9 @@ class ModelConfig:
         need(isinstance(self.solver, str) and bool(self.solver), "solver must be a non-empty name")
         need(isinstance(self.accept_inaccurate, bool), "accept_inaccurate must be a bool")
         need(self.margin_scale_basis in ("margin", "alpha"), "margin_scale_basis must be 'margin' or 'alpha'")
+        need(self.flat_rating_rule in ("solver", "min_feasible"), "flat_rating_rule must be 'solver' or 'min_feasible'")
+        # The least-optimal-rating rule relies on the loss-rate term fixing every team that has a loss.
+        need(self.flat_rating_rule == "solver" or self.gamma_loss > 0, "flat_rating_rule 'min_feasible' needs gamma_loss > 0")
 
     def prior_lambda(self, week: int) -> float:
         """Weight of the prior term for a week: fades linearly to 0 at `prior_fade_weeks`."""
@@ -99,8 +108,9 @@ def check_week(week: int) -> int:
     return week
 
 
-# Football's values, football's implicit solver (OSQP; CVXPY's default for these problems) and
-# football's margin-scale behavior. Used by the parity tests only.
-FOOTBALL_COMPAT = ModelConfig(solver="OSQP", margin_scale_basis="alpha")
+# Football's values, football's implicit solver (OSQP; CVXPY's default for these problems),
+# football's margin-scale behavior and football's solver-chosen flat ratings. Used by the parity
+# tests only.
+FOOTBALL_COMPAT = ModelConfig(solver="OSQP", margin_scale_basis="alpha", flat_rating_rule="solver")
 
 BASKETBALL_DEFAULT = ModelConfig()
