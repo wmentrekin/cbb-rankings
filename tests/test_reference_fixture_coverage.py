@@ -42,13 +42,17 @@ def test_site_mix_rematch_and_unplayed_sentinel():
     assert "postseason" in set(CURRENT["season_type"])  # excluded by the rankings_games view
 
 
-def test_margin_cap_and_tiny_margins():
-    _, games, _, _, _ = assembled(15)
-    median = float(np.median([x[5] for x in games]))  # football's "median margin" is taken over alpha
-    k = 7.0 / max(np.sqrt(median), 1e-6)
-    margins = [x[4] for x in games]
-    assert any(k * np.sqrt(m) > 20 for m in margins)
-    assert any(k * np.sqrt(m) < 20 for m in margins)
+def test_margin_cap_binds_in_every_scenario_from_week_5_and_tiny_margins():
+    # The cap binds above median * (20 / 7)^2 points: the 180-point game (week 5) must exceed it.
+    for s in GOLD["scenarios"].values():
+        if s["week"] < 5:
+            continue
+        _, games, _, _, _ = assembled(s["week"])
+        k = ref.compute_k_margin(games, 7.0)
+        assert k == s["main"]["k_margin"]
+        margins = [x[4] for x in games]
+        assert any(k * np.sqrt(m) > 20 for m in margins), s["week"]
+        assert any(k * np.sqrt(m) < 20 for m in margins)
     assert min(margins) <= 2
 
 

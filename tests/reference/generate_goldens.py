@@ -4,10 +4,14 @@ Usage (from the repository root; sqlalchemy and python-dotenv are needed only
 because football's modules import them at module level; no database is touched):
 
     uv run --with sqlalchemy==2.0.46 --with python-dotenv==1.2.1 \\
-        python tests/reference/generate_goldens.py --football /home/user/cfb-rankings
+        python tests/reference/generate_goldens.py --football /home/user/cfb-main
 
 `--football` may also come from the CFB_RANKINGS_PATH environment variable.
-The football checkout must be at commit 8ab8201; the script refuses otherwise.
+The football checkout must be at commit 40a6b4f; the script refuses otherwise.
+
+Football's `get_ratings` returns the PUBLISHED ratings (shifted by `shift_to_display`); the raw
+solve is read from the solved problem's own variables, so the goldens hold both. The prior model's
+output is raw (football never shifts it).
 
 Isolation: this script imports nothing from this repository's `model`/`database`
 packages. Football's repository root is put first on sys.path and every football
@@ -29,10 +33,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 FIXTURES = HERE.parent / "fixtures"
 OUT = HERE / "goldens" / "football_goldens.json"
-FOOTBALL_COMMIT = "8ab8201"
+FOOTBALL_COMMIT = "40a6b4f"
 
 # (name, year, week). Prior season is always year - 1, solved by football itself.
 SCENARIOS = [
+    ("w01", 2024, 1),    # first week (lambda 6/700); the lowest team is not the one of w03 (shift exercised)
     ("w03", 2024, 3),    # below the fade cutoff, a team with no games yet, 0-0 FBS-vs-FCS game
     ("w06", 2024, 6),    # last faded week (lambda = 1/700)
     ("w07", 2024, 7),    # first week with lambda = 0; 0-0 FBS-vs-FBS game enters the window
@@ -75,8 +80,10 @@ def main():
     football_model = importlib.import_module("model.model")
     football_prior = importlib.import_module("model.prior_model")
     football_pd = importlib.import_module("model.process_data")
+    football_params = importlib.import_module("model.params")
+    football_scale = importlib.import_module("model.margin_scale")
     derivations = importlib.import_module("database.game_derivations")
-    for mod in (football_model, football_prior, football_pd, derivations):
+    for mod in (football_model, football_prior, football_pd, football_params, football_scale, derivations):
         assert str(Path(mod.__file__).resolve()).startswith(str(football) + os.sep), mod.__file__
 
     games_all = pd.read_csv(FIXTURES / "football_games.csv")
@@ -123,8 +130,8 @@ def main():
     prior_capture = []
     real_get_prior = football_prior.get_prior_ratings
 
-    def spy_get_prior(year):
-        out = real_get_prior(year)
+    def spy_get_prior(year, params=football_params.DEFAULT_PARAMS):
+        out = real_get_prior(year, params)
         prior_capture.append(dict(out))  # football later adds default entries to this dict
         return out
     football_model.get_prior_ratings = spy_get_prior
@@ -132,36 +139,41 @@ def main():
     def f(x):
         return None if x is None else float(x)
 
+    params = football_params.DEFAULT_PARAMS
+    assert params.r_min is None and params.display_min == 0.01 and not params.two_sided_margin
+
     def evaluate_terms(assembled, ratings, prior_used, week, with_prior):
-        """Plain-Python evaluation of the four objective terms at a solution.
+        """Plain-Python evaluation of the four objective terms at a RAW solution.
 
         cvxpy flattens the objective sum, so football's term expressions cannot be
         read back from the Problem; this evaluates the same formulas from football's
-        real assembled data, and describe() asserts the total equals problem.value.
+        real assembled data (k from football's own model.margin_scale and constants from
+        its DEFAULT_PARAMS), and describe() asserts the total equals problem.value.
         """
         games = assembled["games"]
-        # football's median is taken over tuple index 5, which is `alpha`, not the margin (model/model.py:63)
-        margins = [abs(g[5]) for g in games if g[5] is not None and g[5] >= 0]
-        median_margin = float(np.median(margins)) if margins else 1.0
-        k_margin = 7.0 / max(np.sqrt(median_margin), 1e-6)
+        k_margin = football_scale.compute_k_margin(games, params.target_gap)
         pos = lambda x: max(x, 0.0)
         margin = loss = fcs = prior = 0.0
         for (i, j, _, winner, m, alpha, _, _) in games:
             w, l = (i, j) if winner == i else (j, i)
-            used = min(k_margin * np.sqrt(max(0.0, float(m))), 20.0)
-            margin += pos(ratings[l] + used * alpha - ratings[w]) ** 2 * 0.05
+            used = min(k_margin * np.sqrt(max(0.0, float(m))), params.max_gap)
+            margin += pos(ratings[l] + used * alpha - ratings[w]) ** 2 * params.gamma_margin
         for team, (wins, losses, _) in assembled["records"].items():
             if wins + losses > 0:
-                loss += (ratings[team] * (losses / (wins + losses))) ** 2 * 0.5
+                loss += (ratings[team] * (losses / (wins + losses))) ** 2 * params.gamma_loss
         for (team, m, alpha, _, _) in assembled["fcs_losses"]:
-            fcs += pos(ratings[team] + m * alpha - ratings["fcs"]) ** 2 * 5
+            fcs += pos(ratings[team] + m * alpha - ratings["fcs"]) ** 2 * params.gamma_fcs
         if with_prior:
             lam = (7 - week) / 700 if week < 7 else 0.0
             prior = lam * sum((ratings[t] - prior_used.get(t, 1)) ** 2 for t in assembled["teams"])
-        return {"margin": margin, "loss_rate": loss, "fcs_loss": fcs, "prior": prior}
+        return {"margin": margin, "loss_rate": loss, "fcs_loss": fcs, "prior": prior}, k_margin
+
+    def raw_values(problem):
+        """The solve's own values, read from the problem as football's code reads them (name[2:])."""
+        return {v.name()[2:]: float(v.value) for v in problem.variables() if v.name().startswith("r_")}
 
     def describe(problem, ratings, assembled, prior_used, week, with_prior):
-        terms = evaluate_terms(assembled, ratings, prior_used, week, with_prior)
+        terms, k_margin = evaluate_terms(assembled, ratings, prior_used, week, with_prior)
         total = sum(terms.values())
         assert abs(total - problem.value) <= 1e-7 * max(1.0, abs(problem.value)), (total, problem.value)
         return {
@@ -169,6 +181,10 @@ def main():
             "terms": terms,
             "r_fcs": f(next(v for v in problem.variables() if v.name() == "r_fcs").value),
             "solver": problem.solver_stats.solver_name,
+            "status": problem.status,
+            "iterations": getattr(problem.solver_stats, "num_iters", None),
+            "median_margin": football_scale.median_margin(assembled["games"]),
+            "k_margin": float(k_margin),
         }
 
     def py(x):
@@ -196,10 +212,18 @@ def main():
         prior_assembled = {"teams": prior_data[0], "games": py(prior_data[1]), "fcs_losses": py(prior_data[2]),
                            "records": py(prior_data[3])}
         prior_used = prior_capture[0]
+        raw = raw_values(main_problem)
+        assert raw_values(prior_problem) == prior_used  # the prior model returns its solve unshifted
+        # get_ratings returns the published ratings: raw + one constant, the lowest TEAM at display_min
+        shift = ratings["Ashford"] - raw["Ashford"]
+        assert set(ratings) == set(raw) and all(abs(ratings[t] - raw[t] - shift) < 1e-9 for t in raw)
+        lowest = min((t for t in raw if t != "fcs"), key=raw.get)
+        assert abs(ratings[lowest] - params.display_min) < 1e-12
         return {
             "year": year, "week": week,
-            "ratings": dict(ratings), "records": py(records),
-            "main": describe(main_problem, dict(ratings), assembled, prior_used, week, True),
+            "ratings": dict(ratings), "raw_ratings": raw, "display_shift": shift, "lowest_team": lowest,
+            "records": py(records),
+            "main": describe(main_problem, raw, assembled, prior_used, week, True),
             "prior_ratings_used": prior_used,
             "prior": describe(prior_problem, prior_used, prior_assembled, None, 0, False),
             "assembled": assembled,
@@ -221,6 +245,8 @@ def main():
         # (undefeated: only one-sided hinges; no games: nothing), so its rating may be a flat direction.
         res["lambda"] = lam
         res["non_unique_teams"] = zero_loss if lam == 0 else []
+        # The published shift is unique only if the lowest team's rating is (README, "Uniqueness").
+        assert res["lowest_team"] not in res["non_unique_teams"], (name, res["lowest_team"])
         scenarios[name] = res
 
     # ---- quirk scenarios, also from the real code ----
@@ -233,7 +259,9 @@ def main():
             return {"raised": type(e).__name__, "message": str(e)}
 
     quirks = {}
+    problems.clear()
     quirks["week_none"] = attempt(lambda: len(football_model.get_ratings(2024, None)[0]))
+    quirks["week_none"]["problems_solved_before_raising"] = sum(p.status == "optimal" for p in problems)
     quirks["no_prior_season_data"] = attempt(lambda: len(football_model.get_ratings(2023, 15)[0]))
     # week=0 is falsy: every game is read, and lambda = 7/700
     problems.clear(); prior_capture.clear()
@@ -241,8 +269,8 @@ def main():
         r0, rec0 = football_model.get_ratings(2024, 0)
         d0 = football_pd.get_data_by_year_up_to_week(2024, 0)
     a0 = {"teams": d0[0], "games": py(d0[1]), "fcs_losses": py(d0[2]), "records": py(d0[3])}
-    quirks["week_zero"] = {"raised": None, "ratings": dict(r0), "records": py(rec0), "week": 0,
-                           **describe(problems[-1], dict(r0), a0, prior_capture[0], 0, True)}
+    quirks["week_zero"] = {"raised": None, "ratings": dict(r0), "raw_ratings": raw_values(problems[-1]), "records": py(rec0),
+                           "week": 0, **describe(problems[-1], raw_values(problems[-1]), a0, prior_capture[0], 0, True)}
 
     base_games = state["games"]
     g24 = games_all[games_all["season"] == 2024]
@@ -258,19 +286,35 @@ def main():
         rt, rect = football_model.get_ratings(2024, 10)
         dt = football_pd.get_data_by_year_up_to_week(2024, 10)
     at = {"teams": dt[0], "games": py(dt[1]), "fcs_losses": py(dt[2]), "records": py(dt[3])}
-    quirks["tie_game"] = {"extra_game": extra, "year": 2024, "week": 10, "ratings": dict(rt), "records": py(rect),
-                          "assembled": py(at), **describe(problems[-1], dict(rt), at, prior_capture[0], 10, True)}
+    quirks["tie_game"] = {"extra_game": extra, "year": 2024, "week": 10, "ratings": dict(rt),
+                          "raw_ratings": raw_values(problems[-1]), "records": py(rect),
+                          "assembled": py(at), **describe(problems[-1], raw_values(problems[-1]), at, prior_capture[0], 10, True)}
 
-    # prior season without lower-division losses: the solve succeeds, then the diagnostic print
-    # dereferences `.value` of the int 0 that cp.sum([]) returned
+    # prior season without lower-division losses: crashed at 8ab8201 (cp.sum([]) is the int 0, whose
+    # `.value` the diagnostics read); guarded since, so it now solves
     g23 = derive(games_all)[lambda d: d["season"] == 2023]
     fbs23 = set(teams_all[teams_all["season"] == 2023]["school"])
     lost_to_lower = g23[((g23["home_team"].isin(fbs23)) & ~g23["away_team"].isin(fbs23) & (g23["home_score"] < g23["away_score"])) |
                         ((g23["away_team"].isin(fbs23)) & ~g23["home_team"].isin(fbs23) & (g23["away_score"] < g23["home_score"]))]
     dropped = [int(i) for i in lost_to_lower["id"]]
     state["games"] = derive(games_all[~games_all["id"].isin(dropped)])
+    problems.clear()
     quirks["prior_without_fcs_losses"] = {"dropped_game_ids": dropped,
-                                          **attempt(lambda: len(football_prior.get_prior_ratings(2023)))}
+                                          **attempt(lambda: football_prior.get_prior_ratings(2023))}
+    if quirks["prior_without_fcs_losses"]["raised"] is None:
+        quirks["prior_without_fcs_losses"]["prior"] = describe(
+            problems[-1], quirks["prior_without_fcs_losses"]["result"],
+            dict(zip(("teams", "games", "fcs_losses", "records"),
+                     (lambda d: (d[0], py(d[1]), py(d[2]), py(d[3])))(football_pd.get_data_by_year_up_to_week(2023)))),
+            None, 0, False)
+    # a season with no FBS-vs-FBS game in the window: the weekly and prior models still sum the margin
+    # terms unguarded (model.py:93,104, prior_model.py:73,84), so the diagnostics read `.value` of the int 0
+    g24_all = derive(games_all)
+    fbs24 = set(teams_all[teams_all["season"] == 2024]["school"])
+    d1_pairs = g24_all[(g24_all["season"] == 2024) & g24_all["home_team"].isin(fbs24) & g24_all["away_team"].isin(fbs24)]
+    state["games"] = g24_all[~g24_all["id"].isin(d1_pairs["id"])]
+    quirks["no_d1_games"] = {"dropped_game_ids": [int(i) for i in d1_pairs["id"]],
+                             **attempt(lambda: len(football_model.get_ratings(2024, 15)[0]))}
     state["games"] = derive(games_all)
 
     # ---- derivation goldens: grid of single-game inputs through football's real functions ----

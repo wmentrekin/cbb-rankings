@@ -102,7 +102,7 @@ id,season,week,season_type,home_team,home_score,away_team,away_score,neutral_sit
 101,2024,5,regular,Larkspur,28,Carlow,25,false
 102,2024,5,regular,Millbrook,53,Juniper,32,false
 103,2024,5,regular,Kingsley,45,Hartwell,33,false
-104,2024,5,regular,Glenrock,91,Northgate,3,false
+104,2024,5,regular,Glenrock,183,Northgate,3,false
 105,2024,6,regular,Millbrook,21,Ashford,44,false
 106,2024,6,regular,Larkspur,16,Oakhurst,33,false
 107,2024,6,regular,Birch College,31,Juniper,10,false

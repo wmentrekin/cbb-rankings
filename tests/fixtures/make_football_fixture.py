@@ -140,8 +140,10 @@ def build():
         # rematch: same two teams, split results
         dict(week=2, home="Carlow", away="Dunmore", neutral=False, hs=28, **{"as": 21}),
         dict(week=6, home="Dunmore", away="Carlow", neutral=False, hs=24, **{"as": 14}),
-        # margin large enough to hit the 20-point cap (88; k*sqrt(88) > 20)
-        dict(week=5, home="Glenrock", away="Northgate", neutral=False, hs=91, **{"as": 3}),
+        # margin large enough to hit the 20-point cap at every scenario week from 5 on: the cap
+        # binds above median * (20/7)^2, about 8.2 times the median margin (13 to 21 here), so
+        # 180 (the 88 of the old fixture capped only under football's former alpha-median bug)
+        dict(week=5, home="Glenrock", away="Northgate", neutral=False, hs=183, **{"as": 3}),
         # tiny margins
         dict(week=4, home="Hartwell", away="Ironwood", neutral=True, hs=24, **{"as": 23}),
         dict(week=8, home="Kingsley", away="Millbrook", neutral=False, hs=19, **{"as": 17}),

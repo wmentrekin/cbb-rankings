@@ -1,15 +1,101 @@
 """Frozen copy of the cfb-rankings optimization, for parity testing.
 
 Provenance, edit list and known quirks: see README.md in this directory.
-Source: cfb-rankings @ 8ab8201 -- model/model.py, model/prior_model.py,
-model/process_data.py, model/connectivity.py, database/game_derivations.py,
-database/get_games.py:97-108.  Do not "fix" anything here; the port decides
-deliberately what to change.
+Source: cfb-rankings @ 40a6b4f -- model/params.py, model/margin_scale.py,
+model/model.py, model/prior_model.py, model/process_data.py, model/connectivity.py,
+database/game_derivations.py, database/get_games.py:97-108.  Do not "fix" anything
+here; the port decides deliberately what to change.
 """
+from dataclasses import dataclass
+from typing import Optional
+
 import cvxpy as cp
 import networkx as nx
 import numpy as np
 import pandas as pd
+
+
+# --- model/params.py (lines 12-56; module docstring dropped) ---
+
+@dataclass(frozen=True)
+class ModelParams:
+    # Lower bound on a team's rating inside the solve. None = no bound, which is production.
+    # A bound of 0.01 was the model until the 2026 retune: about a quarter of FBS sat on it
+    # every week, all tied, in no meaningful order (a loss asks the loser to sit a set gap
+    # below the winner, and a team that lost to low-rated teams "wants" to be below zero).
+    r_min: Optional[float] = None
+    # What the lowest team's PUBLISHED rating is shifted to. The solve is anchored at zero by
+    # the loss-rate penalty, so its raw ratings run negative at the bottom; every rating is
+    # moved up by the same amount so the lowest reads `display_min`. A uniform shift changes no
+    # gap and no rank. None = publish raw. The prior model's output is never shifted: it is fed
+    # back into the next season's solve, which works on the raw scale.
+    display_min: Optional[float] = 0.01
+    r_max: float = 100.0         # maximum team rating
+    r_fcs_min: float = 0.01      # minimum rating of the stand-in FCS team
+    r_fcs_max: float = 15.0      # maximum rating of the stand-in FCS team
+    gamma_loss: float = 0.5      # weight of the loss-rate penalty
+    gamma_fcs: float = 5.0       # weight of the FCS-loss penalty
+    gamma_margin: float = 0.05   # weight of the margin penalty
+    target_gap: float = 7.0      # rating points a median-margin win should demand
+    max_gap: float = 20.0        # most rating points any one margin can demand
+    # False: a result only penalises a winner that is not far ENOUGH above the loser (a hinge).
+    # True: it also penalises one that is too far above, pinning the pair to the demanded gap.
+    two_sided_margin: bool = False
+
+
+DEFAULT_PARAMS = ModelParams()
+
+# The model as it was published before the 2026 retune (apart from the margin scale, which
+# scripts/compare_margin_scale.py swaps separately): a hard floor and no shift.
+LEGACY_FLOOR_PARAMS = ModelParams(r_min=0.01, display_min=None)
+
+
+def shift_to_display(ratings: dict, params: ModelParams) -> dict:
+    """Move every rating by one constant so the lowest TEAM reads params.display_min.
+
+    The stand-in FCS team ("fcs") moves with the rest but is not what sets the shift.
+    """
+    if params.display_min is None:
+        return ratings
+    team_values = [value for name, value in ratings.items() if name != "fcs"]
+    if not team_values:
+        return ratings
+    offset = params.display_min - min(team_values)
+    return {name: value + offset for name, value in ratings.items()}
+
+
+# --- model/margin_scale.py (lines 21-50; module docstring dropped) ---
+
+# Positions in a game tuple built by model.process_data.process_game_data.
+GAME_MARGIN_INDEX = 4
+GAME_ALPHA_INDEX = 5
+
+# Used when there are no games to take a median over.
+FALLBACK_MEDIAN_MARGIN = 1.0
+MIN_SQRT_MEDIAN = 1e-6
+
+
+def median_margin(games) -> float:
+    """Median margin of victory over `games`; FALLBACK_MEDIAN_MARGIN when there are none.
+
+    Missing (None / NaN) and negative margins are left out, as the inline code intended.
+    """
+    margins = []
+    for game in games:
+        margin = game[GAME_MARGIN_INDEX]
+        if margin is None:
+            continue
+        margin = float(margin)
+        if margin >= 0:  # False for NaN as well
+            margins.append(margin)
+    if not margins:
+        return FALLBACK_MEDIAN_MARGIN
+    return float(np.median(margins))
+
+
+def compute_k_margin(games, target_gap: float) -> float:
+    """Rating points per sqrt(point of margin), scaled so the median game demands `target_gap`."""
+    return target_gap / max(float(np.sqrt(median_margin(games))), MIN_SQRT_MEDIAN)
 
 
 # --- database/game_derivations.py (lines 10-49, docstrings dropped) ---
@@ -145,7 +231,7 @@ def process_game_data(games_df, fbs_teams_df):
 
 
 def get_games_by_year_week(all_games_df, year, week=None):
-    """In-memory stand-in for the SQL at model/process_data.py:119-125.
+    """In-memory stand-in for the SQL at model/process_data.py:119-125 (unchanged since 8ab8201).
 
     `rankings_games` is `SELECT * FROM games WHERE season_type = 'regular'`
     (database/migrations/0001_rankings_games_view.sql); the year/week predicates
@@ -174,32 +260,25 @@ def get_data_by_year_up_to_week(all_games_df, all_teams_df, year, week=None):
 
 # --- model/prior_model.py ---
 
-def get_prior_ratings(all_games_df, all_teams_df, year, solver=None):
-    """model/prior_model.py:8-135 (prior-season solve: no prior term, no lambda).
+def get_prior_ratings(all_games_df, all_teams_df, year, params = DEFAULT_PARAMS, solver=None):
+    """model/prior_model.py:10-136 (prior-season solve: no prior term, no lambda).
 
     Returns (prior_ratings, details). Football returns only the ratings dict
-    (including the "fcs" entry); `details` is added (edit c).
+    (including the "fcs" entry), RAW: the prior model's output is never shifted.
+    `details` is added (edit 3).
     """
     teams, games, fcs_losses, records, connectivity = get_data_by_year_up_to_week(all_games_df, all_teams_df, year)
 
     # Parameters
-    r_min = 0.01 # minimum team rating
-    r_max = 100 # maximum team rating
-    r_fcs_min = 0.01 # mininum FCS rating
-    r_fcs_max = 15 # maximum FCS rating
-    gamma_margin = 0.05 # small margin penalty coefficient
-    gamma_loss = 0.5 # regularization constant for loss rate
-    gamma_fcs = 5 # regularization constant for FCS loss
+    # Values and their meanings live in model/params.py; the defaults are the production model.
+    r_min, r_max = params.r_min, params.r_max
+    r_fcs_min, r_fcs_max = params.r_fcs_min, params.r_fcs_max
+    gamma_loss, gamma_fcs, gamma_margin = params.gamma_loss, params.gamma_fcs, params.gamma_margin
 
     # Margin Regularization Parameters
-    TARGET_GAP_FOR_MEDIAN = 7.0        # rating points the median margin should represent
-    MAX_RATING_GAP_FROM_MARGIN = 20.0  # cap for maximum rating gap any margin can demand
-    margins = [abs(m) for (_, _, _, _, _, m, _, _) in games if m is not None and m >= 0]
-    if len(margins) == 0:
-        median_margin = 1.0
-    else:
-        median_margin = float(np.median(margins))
-    k_margin = TARGET_GAP_FOR_MEDIAN / max(np.sqrt(median_margin), 1e-6)
+    TARGET_GAP_FOR_MEDIAN = params.target_gap      # rating points the median margin should represent
+    MAX_RATING_GAP_FROM_MARGIN = params.max_gap    # cap for maximum rating gap any margin can demand
+    k_margin = compute_k_margin(games, TARGET_GAP_FOR_MEDIAN)
 
     # Decision Variables
     r = {team: cp.Variable(name = f"r_{team}") for team in teams} # team rating
@@ -209,7 +288,9 @@ def get_prior_ratings(all_games_df, all_teams_df, year, solver=None):
     fcs_loss_terms = []
     for (team, margin, alpha, _, _) in fcs_losses:
         fcs_loss_terms.append(cp.pos(r[team] + (margin * alpha) - r_fcs)**2 * gamma_fcs)
-    fcs_loss_penalty = cp.sum(fcs_loss_terms)
+    # cp.sum([]) is a plain 0 with no .value, which crashed the diagnostics below in a season
+    # with no FCS losses. Same guard as model/model.py.
+    fcs_loss_penalty = cp.sum(fcs_loss_terms) if fcs_loss_terms else cp.Constant(0.0)
 
     # Soft Margin Penalty Terms
     soft_margin_terms = []
@@ -223,7 +304,10 @@ def get_prior_ratings(all_games_df, all_teams_df, year, solver=None):
         else:
             winner_team = j
             loser_team = i
-        soft_margin_terms.append(cp.pos(r[loser_team] + (margin_used * alpha) - r[winner_team])**2 * gamma_margin)
+        shortfall = r[loser_team] + (margin_used * alpha) - r[winner_team]
+        if not params.two_sided_margin:
+            shortfall = cp.pos(shortfall)
+        soft_margin_terms.append(shortfall**2 * gamma_margin)
     soft_margin_penalty = cp.sum(soft_margin_terms)
 
     # Loss Rate Penalty Terms
@@ -243,14 +327,16 @@ def get_prior_ratings(all_games_df, all_teams_df, year, solver=None):
     # Constraints
     constraints = []
     for (team) in teams:
-        constraints.append(r[team] >= r_min)
+        if r_min is not None:
+            constraints.append(r[team] >= r_min)
         constraints.append(r[team] <= r_max)
     constraints.append(r_fcs >= r_fcs_min)
     constraints.append(r_fcs <= r_fcs_max)
-    for (team) in teams:
-        constraints.append(r[team] >= 0)
-    constraints.append(r_fcs >= r_fcs_min)
-    constraints.append(r_fcs <= r_fcs_max)
+    # Redundant with a positive r_min (the pre-2026 model); skipped when there is no lower
+    # bound (production), where it would silently put the floor back.
+    if r_min is not None and r_min >= 0:
+        for (team) in teams:
+            constraints.append(r[team] >= 0)
 
     # Solve
     problem = cp.Problem(objective, constraints)
@@ -278,7 +364,6 @@ def get_prior_ratings(all_games_df, all_teams_df, year, solver=None):
         "prior_term": 0.0,
         "r_fcs": float(r_fcs.value),
         "solver": problem.solver_stats.solver_name,
-        "median_margin": median_margin,
         "k_margin": float(k_margin),
         "n_games": len(games),
         "n_fcs_losses": len(fcs_losses),
@@ -288,18 +373,20 @@ def get_prior_ratings(all_games_df, all_teams_df, year, solver=None):
 
 # --- model/model.py ---
 
-def get_ratings(all_games_df, all_teams_df, year, week=None, prior_ratings=None, solver=None):
-    """model/model.py:9-158.
+def get_ratings(all_games_df, all_teams_df, year, week = None, params = DEFAULT_PARAMS, prior_ratings=None, solver=None):
+    """model/model.py:11-160.
 
     Returns (ratings, records, details). Football returns (ratings, records);
-    `ratings` includes the "fcs" entry. `prior_ratings` (dict) replaces the DB
-    read chain `get_prior_ratings(year - 1)`; when None the reference prior
-    solve is run on the same in-memory frames. `details` is added (edit c).
+    `ratings` is SHIFTED for display (shift_to_display) and includes the "fcs"
+    entry. `prior_ratings` (dict) replaces the DB read chain
+    `get_prior_ratings(year - 1, params)`; when None the reference prior solve is
+    run on the same in-memory frames. `details` is added (edit 3) and carries
+    `raw_ratings`, the solve's values before the shift.
     """
     # Get Data
     teams, games, fcs_losses, records, connectivity = get_data_by_year_up_to_week(all_games_df, all_teams_df, year, week)
     if prior_ratings is None:
-        prior_ratings, _ = get_prior_ratings(all_games_df, all_teams_df, year - 1, solver=solver)
+        prior_ratings, _ = get_prior_ratings(all_games_df, all_teams_df, year - 1, params, solver=solver)
     else:
         prior_ratings = dict(prior_ratings)  # football mutates its own dict; do not mutate the caller's
 
@@ -309,13 +396,10 @@ def get_ratings(all_games_df, all_teams_df, year, week=None, prior_ratings=None,
             prior_ratings[team] = 1
 
     # Parameters
-    r_min = 0.01 # minimum team rating
-    r_max = 100 # maximum team rating
-    r_fcs_min = 0.01 # mininum FCS rating
-    r_fcs_max = 15 # maximum FCS rating
-    gamma_loss = 0.5 # regularitzation constant for loss rate
-    gamma_fcs = 5 # regularization constant for FCS loss
-    gamma_margin = 0.05 # small margin penalty coefficient
+    # Values and their meanings live in model/params.py; the defaults are the production model.
+    r_min, r_max = params.r_min, params.r_max
+    r_fcs_min, r_fcs_max = params.r_fcs_min, params.r_fcs_max
+    gamma_loss, gamma_fcs, gamma_margin = params.gamma_loss, params.gamma_fcs, params.gamma_margin
 
     # Prior Regularization Parameter
     _lambda = cp.Parameter(nonneg=True) # calculate term based on lambda_max and connectivity matrix
@@ -325,14 +409,9 @@ def get_ratings(all_games_df, all_teams_df, year, week=None, prior_ratings=None,
         _lambda.value = 0
 
     # Margin Regularization Parameters
-    TARGET_GAP_FOR_MEDIAN = 7.0        # rating points the median margin should represent
-    MAX_RATING_GAP_FROM_MARGIN = 20.0  # cap for maximum rating gap any margin can demand
-    margins = [abs(m) for (_, _, _, _, _, m, _, _) in games if m is not None and m >= 0]
-    if len(margins) == 0:
-        median_margin = 1.0
-    else:
-        median_margin = float(np.median(margins))
-    k_margin = TARGET_GAP_FOR_MEDIAN / max(np.sqrt(median_margin), 1e-6)
+    TARGET_GAP_FOR_MEDIAN = params.target_gap      # rating points the median margin should represent
+    MAX_RATING_GAP_FROM_MARGIN = params.max_gap    # cap for maximum rating gap any margin can demand
+    k_margin = compute_k_margin(games, TARGET_GAP_FOR_MEDIAN)
 
     # Decision Variables
     r = {team: cp.Variable(name = f"r_{team}") for team in teams} # team rating
@@ -359,7 +438,10 @@ def get_ratings(all_games_df, all_teams_df, year, week=None, prior_ratings=None,
         else:
             winner_team = j
             loser_team = i
-        soft_margin_terms.append(cp.pos(r[loser_team] + (margin_used * alpha) - r[winner_team])**2 * gamma_margin)
+        shortfall = r[loser_team] + (margin_used * alpha) - r[winner_team]
+        if not params.two_sided_margin:
+            shortfall = cp.pos(shortfall)
+        soft_margin_terms.append(shortfall**2 * gamma_margin)
     soft_margin_penalty = cp.sum(soft_margin_terms)
 
     # Loss Rate Penalty Terms
@@ -379,7 +461,8 @@ def get_ratings(all_games_df, all_teams_df, year, week=None, prior_ratings=None,
     # Constraints
     constraints = []
     for (team) in teams:
-        constraints.append(r[team] >= r_min)
+        if r_min is not None:
+            constraints.append(r[team] >= r_min)
         constraints.append(r[team] <= r_max)
     constraints.append(r_fcs >= r_fcs_min)
     constraints.append(r_fcs <= r_fcs_max)
@@ -413,12 +496,17 @@ def get_ratings(all_games_df, all_teams_df, year, week=None, prior_ratings=None,
             "r_fcs": float(r_fcs.value),
             "solver": problem.solver_stats.solver_name,
             "lambda": float(_lambda.value),
-            "median_margin": median_margin,
             "k_margin": float(k_margin),
             "connectivity": connectivity,
             "n_games": len(games),
             "n_fcs_losses": len(fcs_losses),
+            "raw_ratings": ratings,
         }
+
+        # Published scale: one uniform shift, after every diagnostic above has read the raw
+        # solve. Order is unchanged, so `ratings` stays sorted.
+        ratings = shift_to_display(ratings, params)
+
         return ratings, records, details
 
     else:
