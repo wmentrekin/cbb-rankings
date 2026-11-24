@@ -6,7 +6,8 @@ The characterization these tests check (model/README.md, "Undetermined ratings")
 a loss is fixed by its loss-rate term, so it has one value over the whole optimal set; a team with
 no loss appears only as the winner of hinges against such teams, so its optimal values form the
 interval [max(T, r_min), r_max] with T = max over its D-I wins of (r_loser + demanded gap), or just
-{r_max} when T >= r_max."""
+{r_max} when T >= r_max. With no lower bound (r_min None, football and production) a team with no
+D-I win has the optimal set (-inf, r_max], and the rule uses UNCONSTRAINED_RATING (0.0)."""
 import dataclasses
 import random
 
@@ -17,12 +18,12 @@ from ingest.derive import derive_result
 from model.assemble import Game, LowerLoss, assemble
 from model.config import BASKETBALL_DEFAULT, FOOTBALL_COMPAT
 from model.pipeline import rate_week
-from model.solve import solve
+from model.solve import UNCONSTRAINED_RATING, solve
 from tests.football_adapter import build
 from tests.reference.measure_solvers import synthetic
 from tests.test_model_scale import season_rows
 
-MF = dataclasses.replace(FOOTBALL_COMPAT, solver="CLARABEL", margin_scale_basis="margin", flat_rating_rule="min_feasible")
+MF = dataclasses.replace(FOOTBALL_COMPAT, solver="CLARABEL", flat_rating_rule="min_feasible")
 SOLVER_RULE = dataclasses.replace(MF, flat_rating_rule="solver")
 EXACT = 1e-9  # closed-form arithmetic on the solver's own determined ratings: float rounding only
 
@@ -101,13 +102,15 @@ def test_capped_margin_demands_the_cap_times_alpha():
     assert_determined_unchanged(mf, sv)
 
 
-def test_wins_only_over_lower_division_and_no_games_both_give_r_min():
+def test_wins_only_over_lower_division_and_no_games_get_zero_without_a_floor_and_r_min_with_one():
     # Team 4 is 3-0, all against non-D-I opponents (record-only events); team 5 has no games.
     records = records_of(A_GAMES, extra={4: (3, 0), 5: (0, 0)})
     mf, sv = both(A_GAMES, [], [1, 2, 3, 4, 5], records=records)
     assert set(mf.flat_team_ids) == {1, 4, 5}
-    assert mf.ratings[4] == MF.r_min and mf.ratings[5] == MF.r_min
+    assert mf.ratings[4] == UNCONSTRAINED_RATING == 0.0 and mf.ratings[5] == UNCONSTRAINED_RATING
     assert_determined_unchanged(mf, sv)
+    floored = solve(A_GAMES, [], records, [1, 2, 3, 4, 5], None, 10, dataclasses.replace(MF, r_min=0.01))
+    assert floored.ratings[4] == floored.ratings[5] == 0.01
 
 
 def test_unbeaten_teams_in_disconnected_components_each_get_their_own_threshold():
@@ -120,17 +123,18 @@ def test_unbeaten_teams_in_disconnected_components_each_get_their_own_threshold(
 
 
 def test_unbeaten_team_whose_threshold_exceeds_r_max_is_determined_and_kept():
-    # A chain of 400-point neutral wins (capped gap 20 each; ten 1-point games between 8 and 9 make
-    # the median 1, k = 7) with tiny loss rates pushes team 2 to about 81; team 1 then needs
-    # r_2 + 20 > r_max, so r_max is its unique optimum (its hinge stays positive).
-    chain = [2, 3, 4, 5, 6, 7]
+    # A chain of 400-point neutral wins (capped gap 20 each; twelve 1-point games between 20 and 21 make
+    # the median 1, k = 7) with tiny loss rates spreads the chain over about 180 points around zero
+    # (no floor) and pushes team 2 above 80; team 1 then needs r_2 + 20 > r_max, so r_max is its
+    # unique optimum (its hinge stays positive).
+    chain = list(range(2, 12))
     games = ([Game(1, 2, 400, 1.0)] + [Game(a, b, 400, 1.0) for a, b in zip(chain, chain[1:])]
-             + [Game(7, 6, 1, 1.0)] + [Game(8, 9, 1, 1.0), Game(9, 8, 1, 1.0)] * 5)
+             + [Game(11, 10, 1, 1.0)] + [Game(20, 21, 1, 1.0), Game(21, 20, 1, 1.0)] * 6)
     records = records_of(games, extra={t: (1000, 1) for t in chain})
-    mf, sv = both(games, [], [1] + chain + [8, 9], records=records)
+    mf, sv = both(games, [], [1] + chain + [20, 21], records=records)
     assert mf.flat_team_ids == (1,)
     assert mf.ratings[2] + 20 > MF.r_max
-    assert mf.ratings[1] == sv.ratings[1] == pytest.approx(MF.r_max, abs=1e-6)
+    assert mf.ratings[1] == sv.ratings[1] == pytest.approx(MF.r_max, abs=1e-5)  # interior point: measured 5.7e-6 short
     assert mf.max_flat_adjustment == 0.0
     assert_determined_unchanged(mf, sv)
 
@@ -153,7 +157,7 @@ def test_r_lower_takes_its_least_optimal_value():
 
 
 def test_rule_is_a_no_op_while_the_prior_is_on():
-    for week in range(1, 7):
+    for week in range(1, MF.prior_fade_weeks):
         mf, sv = both(A_GAMES, [], [1, 2, 3], week=week, priors={1: 30.0})
         assert mf.lam > 0 and mf.flat_team_ids == () and mf.max_flat_adjustment == 0.0
         assert mf.ratings == sv.ratings and mf.objective == sv.objective
@@ -192,7 +196,8 @@ def assert_least_optimal(res, a, config):
     for t in res.flat_team_ids:
         gaps = [res.ratings[g.loser] + min(k * np.sqrt(g.margin), config.max_gap_from_margin) * g.alpha
                 for g in a.games if g.winner == t]
-        least = max([config.r_min] + gaps)
+        floor = [config.r_min] if config.r_min is not None else []
+        least = max(floor + gaps) if floor + gaps else UNCONSTRAINED_RATING
         if least < config.r_max:
             assert res.ratings[t] == pytest.approx(least, abs=EXACT), t
         assert all(x - res.ratings[t] <= EXACT for x in gaps), t
@@ -206,9 +211,9 @@ def test_fixture_every_week_objective_and_determined_ratings_unchanged(fixture_p
     assert_determined_unchanged(mf, sv)
     assert_least_optimal(mf, a, MF)
     values = np.array(list(mf.ratings.values()))
-    assert values.min() >= MF.r_min - 1e-6 and values.max() <= MF.r_max + 1e-6
+    assert values.max() <= MF.r_max + 1e-6  # no lower bound: the bottom runs below zero
     assert MF.r_lower_min - 1e-6 <= mf.r_lower <= MF.r_lower_max + 1e-6
-    if week < 7:
+    if week < MF.prior_fade_weeks:
         assert mf.flat_team_ids == () and mf.ratings == sv.ratings
     else:
         assert set(mf.flat_team_ids) == {t for t, (w, l) in a.records.items() if l == 0}
@@ -231,9 +236,9 @@ def test_fixture_min_feasible_is_solver_independent(week):
         base, other = out["min_feasible", "CLARABEL"].ratings, out["min_feasible", s].ratings
         det = max(abs(base[t] - other[t]) for t in base if t not in flat)
         flt = max(abs(base[t] - other[t]) for t in flat)
-        assert det < 1e-3 and flt <= det + EXACT, (s, det, flt)  # measured: OSQP 1.8e-5 / 3.6e-5, SCS 4.7e-5 / 1.3e-4
+        assert det < 1e-3 and flt <= det + EXACT, (s, det, flt)  # measured (det, weeks 7/10): OSQP 6.7e-5 / 2.0e-4, SCS 3.4e-7 / 3.2e-7
         loose = max(abs(out["solver", "CLARABEL"].ratings[t] - out["solver", s].ratings[t]) for t in flat)
-        assert loose > 10, (s, loose)  # measured 28 to 37
+        assert loose > 10, (s, loose)  # measured 54 to 79
 
 
 def test_fixture_min_feasible_is_independent_of_input_order():
@@ -259,12 +264,12 @@ def synthetic_season():
     return sorted(ids.values()), rows
 
 
-@pytest.mark.parametrize("week", [7, 10, 14])
+@pytest.mark.parametrize("week", [10, 14])  # lambda is 0 from week 10 under BASKETBALL_DEFAULT
 def test_synthetic_basketball_season_is_solver_independent(synthetic_season, week):
     """OSQP and SCS both reach status `optimal` on these main solves (lambda 0; it is the prior
     solve at this size where OSQP hits its iteration cap), so production's optimal-only rule is
-    kept. Determined ratings agree to OSQP's / SCS's own accuracy (measured up to 4.7e-3 and
-    9.4e-3); the flat ones agree to no worse, while under "solver" they differ by 1 to 11 points."""
+    kept. Determined ratings agree to OSQP's / SCS's own accuracy (measured up to 2.6e-4 and
+    2.0e-5); the flat ones agree to no worse, while under "solver" they differ by 84 to 90 points."""
     teams, rows = synthetic_season
     a = assemble([r for r in rows if r["week"] <= week], teams)
     out = {
@@ -319,7 +324,7 @@ def test_prior_season_unbeaten_team_gets_its_least_feasible_rating_as_its_prior(
     least = prior.ratings[2] + 7.0  # median margin 9 -> k = 7/3; a neutral 9-point win demands 7
     if rule == "min_feasible":
         assert prior.ratings[1] == pytest.approx(least, abs=EXACT)
-        assert prior.ratings[4] == MF.r_min
-        assert out.ratings[1] == pytest.approx(least, abs=1e-4)  # only its prior term acts on it
+        assert prior.ratings[4] == UNCONSTRAINED_RATING  # no 2023 game, no floor
+        assert out.raw_ratings[1] == pytest.approx(least, abs=1e-4)  # only its prior term acts on it (raw scale)
     else:
         assert prior.ratings[1] > least + 1  # the solver's arbitrary point (CLARABEL lands high)

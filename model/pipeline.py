@@ -1,5 +1,14 @@
 """`rate_week`: read a season's data from the store, run the prior-season solve (when it can
-matter) and the main solve. Reads only; the orchestration writes the ratings."""
+matter) and the main solve, and put the result on the published scale. Reads only; the
+orchestration writes the ratings.
+
+Two scales, as in football (cfb-rankings @ 40a6b4f, `model/params.py`):
+* RAW: what the solve returns. No lower bound, so the bottom runs below zero. Priors are raw: the
+  prior season is re-solved from its stored GAMES on every run (never read from the `ratings`
+  table) and fed to the main solve unshifted.
+* PUBLISHED: the raw ratings plus one constant, so the lowest D-I team reads `display_min`
+  (`shift_to_display`, the only place the shift is computed). This is what is stored and published.
+"""
 from __future__ import annotations
 
 import logging
@@ -31,14 +40,27 @@ class NoTeamsError(RuntimeError):
     """The season has no D-I teams in the store, so there is nothing to rate."""
 
 
+def shift_to_display(raw: dict[int, float], config: ModelConfig) -> tuple[dict[int, float], float]:
+    """(published ratings, shift): every rating moved by one constant so the lowest team reads
+    `config.display_min`; (a copy of `raw`, 0.0) when `display_min` is None or there are no teams.
+    A uniform shift changes no gap and no rank. Football's `shift_to_display` also moves its dummy
+    "fcs" entry; here the dummy is not a key, and `RatingsResult.display_shift` applies to it."""
+    if config.display_min is None or not raw:
+        return dict(raw), 0.0
+    shift = config.display_min - min(raw.values())
+    return {t: value + shift for t, value in raw.items()}, shift
+
+
 @dataclass(frozen=True)
 class RatingsResult:
     season: int
     week: int
-    ratings: dict[int, float]  # every D-I team of the season; never the dummy team
+    published_ratings: dict[int, float]  # what is stored and published: raw + display_shift
+    raw_ratings: dict[int, float]  # the solve (solve.ratings); every D-I team; never the dummy
+    display_shift: float  # published - raw, the same for every team
     records: dict[int, tuple[int, int]]  # (wins, losses), including games against non-D-I teams
     solve: SolveResult  # main solve diagnostics (includes the dummy rating, r_lower)
-    prior_solve: SolveResult | None  # None when skipped (lambda 0) or no prior-season data
+    prior_solve: SolveResult | None  # raw; None when skipped (lambda 0) or no prior-season data
     connectivity: float  # diagnostic only
     n_games_ignored_unplayed: int
     n_games_ignored_no_d1: int
@@ -84,7 +106,7 @@ def rate_week(store: Store, season: int, week: int, config: ModelConfig = BASKET
             prior_result = solve(
                 prior_data.games, prior_data.lower_losses, prior_data.records, prior_teams, None, week, config
             )
-            priors = prior_result.ratings
+            priors = prior_result.ratings  # raw, never shifted
 
     result = solve(data.games, data.lower_losses, data.records, team_ids, priors, week, config)
     allowed = {config.alpha.neutral, config.alpha.home_win, config.alpha.away_win}
@@ -92,12 +114,15 @@ def rate_week(store: Store, season: int, week: int, config: ModelConfig = BASKET
     if odd - allowed:
         warnings.append(f"stored alpha values {sorted(odd - allowed)} are not in the configured set {sorted(allowed)}")
     warnings.extend(result.warnings)
+    published, shift = shift_to_display(result.ratings, config)
     if prior_result:
         warnings.extend(f"prior solve: {w}" for w in prior_result.warnings)
     return RatingsResult(
         season=season,
         week=week,
-        ratings=result.ratings,
+        published_ratings=published,
+        raw_ratings=result.ratings,
+        display_shift=shift,
         records=data.records,
         solve=result,
         prior_solve=prior_result,

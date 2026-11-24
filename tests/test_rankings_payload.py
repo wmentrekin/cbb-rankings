@@ -58,12 +58,12 @@ def test_ties_ignore_case_then_use_team_id_and_never_row_order():
         assert [r["rank"] for r in rank_rows(rows)] == [1, 2, 3, 4, 5, 6]
 
 
-def test_many_teams_tied_at_the_floor_rank_stably_through_the_payload(store):
+def test_tied_ratings_rank_stably_through_the_payload(store):
     for team_id, name in [(3, "delta"), (1, "Charlie"), (2, "bravo"), (4, "Alpha"), (5, "Top")]:
         add_team(store, team_id, name)
-    floor = (0.0, 0, 5)
-    add_ratings(store, 1, {3: floor, 1: floor, 2: floor, 4: floor, 5: (30.0, 5, 0)})
-    add_ratings(store, 2, {1: floor, 2: floor, 3: floor, 4: floor, 5: (31.0, 6, 0)})
+    tied = (0.0, 0, 5)
+    add_ratings(store, 1, {3: tied, 1: tied, 2: tied, 4: tied, 5: (30.0, 5, 0)})
+    add_ratings(store, 2, {1: tied, 2: tied, 3: tied, 4: tied, 5: (31.0, 6, 0)})
     wk2 = build_payload(store, 2026, 2, now=NOW)["rankings"]
     assert [r["team"] for r in wk2] == ["Top", "Alpha", "bravo", "Charlie", "delta"]
     assert [r["delta"] for r in wk2] == [0] * 5  # equal ratings keep the same order week to week

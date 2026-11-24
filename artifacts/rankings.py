@@ -69,9 +69,9 @@ def previous_week_with_data(store: Store, season: int, week: int, table: str = "
 
 
 def rank_rows(rows: Sequence[dict]) -> list[dict]:
-    """Rows ordered best first, each with `rank` (1 = best). Equal ratings are common (many teams
-    sit at the rating floor), so the tie-break is explicit and total: team name, case-insensitively,
-    then team id."""
+    """Rows ordered best first, each with `rank` (1 = best). Equal stored ratings are possible (the
+    model has no rating floor any more, but values are stored to 6 decimals), so the tie-break is
+    explicit and total: team name, case-insensitively, then team id."""
     ordered = sorted(rows, key=lambda r: (-float(r["rating"]), r["team"].casefold(), r["team_id"]))
     return [{**r, "rank": i} for i, r in enumerate(ordered, 1)]
 

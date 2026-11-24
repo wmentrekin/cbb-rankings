@@ -103,7 +103,7 @@ def test_happy_path_ingests_rates_writes_and_publishes(store):
     validate_index(s3.json("cbb/rankings/index.json"), [(2026, [10])])
     text = "\n".join(lines)
     for needle in ("api_calls: 2 (quota remaining 898)", "d1_rows_written_ingest: 101", "teams_rated: 59", "model_status: optimal",
-                   "solve_seconds:", "margin_median_and_k:", "capped_games:", "teams_at_floor:", "n_flat_teams:", "r_lower:",
+                   "solve_seconds:", "margin_median_and_k:", "capped_games:", "raw_rating_range:", "display_shift:", "n_flat_teams:", "r_lower:",
                    "ratings_rows_written: 59", "artifact_keys:", "ingest_anomalies: none", "ingest_warnings: none"):
         assert needle in text, needle
 
@@ -209,7 +209,7 @@ def test_model_error_writes_and_publishes_nothing(store, monkeypatch, error):
     assert type(error).__name__ in "\n".join(lines)
 
 
-def test_missing_prior_season_fails_in_weeks_1_to_6(store, monkeypatch):
+def test_missing_prior_season_fails_while_the_prior_weight_is_positive(store, monkeypatch):
     trip = Tripwire()
     monkeypatch.setattr(main, "rate_week", trip)
     s3 = FakeS3()
@@ -224,6 +224,22 @@ def test_missing_prior_season_fails_the_scheduled_run_too(store):
     code, lines = go(Options(), store, season_2027_api(), s3, today=MONDAY_2026_11_23)
     assert code == 1 and any(ln.startswith("PRIOR_FAILURE:") and "Backfill season 2026" in ln for ln in lines)
     assert count(store, "games") > 0 and count(store) == 0 and s3.puts == []  # ingested, then stopped
+
+
+def test_the_prior_requirement_follows_the_configured_fade_week(store):
+    from model.config import BASKETBALL_DEFAULT
+
+    last = BASKETBALL_DEFAULT.prior_fade_weeks - 1  # 9: the last week with prior weight > 0
+    code, lines = go(Options(season=2026, week=last), store, season_2026_api(), FakeS3())
+    assert code == 1 and any(ln.startswith("PRIOR_FAILURE:") for ln in lines)
+    code, _ = go(Options(season=2026, week=last + 1), store, season_2026_api(), FakeS3())
+    assert code == 0
+
+
+def test_stored_ratings_are_published_on_the_shifted_scale(store):
+    go(Options(season=2026, week=10), store, season_2026_api(), FakeS3())
+    ratings = [r["rating"] for r in store.query("SELECT rating FROM ratings WHERE season = 2026 AND week = 10")]
+    assert min(ratings) == 0.01 and len(set(ratings)) > 1
 
 
 def test_allow_missing_prior_rates_without_priors(store):
@@ -367,14 +383,14 @@ def test_publish_staging_uses_the_staging_prefix_and_staging_ratings_and_never_p
 
 def test_range_mode_ingests_once_and_publishes_each_week_in_order(store):
     api, s3 = season_2026_api(), FakeS3()
-    code, lines = go(Options(season=2026, weeks=(9, 11)), store, api, s3)
+    code, lines = go(Options(season=2026, weeks=(10, 12)), store, api, s3)  # week 10: the first without a prior
     assert code == 0 and api.calls == 2  # ONE ingest
-    assert [ln for ln in lines if ln.startswith("WEEKLY_OK")] == [f"WEEKLY_OK season=2026 week={w}" for w in (9, 10, 11)]
-    assert lines[-1].startswith("RANGE_DONE season=2026 weeks=9-11 ratings_rows_written=177")
+    assert [ln for ln in lines if ln.startswith("WEEKLY_OK")] == [f"WEEKLY_OK season=2026 week={w}" for w in (10, 11, 12)]
+    assert lines[-1].startswith("RANGE_DONE season=2026 weeks=10-12 ratings_rows_written=177")
     assert count(store) == 177
-    validate_index(s3.json("cbb/rankings/index.json"), [(2026, [9, 10, 11])])
-    assert s3.json("cbb/rankings/latest.json")["week"] == 11
-    assert all(r["delta"] == 0 for r in s3.json("cbb/rankings/2026/week-09.json")["rankings"])
+    validate_index(s3.json("cbb/rankings/index.json"), [(2026, [10, 11, 12])])
+    assert s3.json("cbb/rankings/latest.json")["week"] == 12
+    assert all(r["delta"] == 0 for r in s3.json("cbb/rankings/2026/week-10.json")["rankings"])
 
 
 def test_all_weeks_then_no_ingest_rerun_writes_nothing_new(store):
@@ -422,15 +438,15 @@ def test_write_ratings_refuses_unknown_tables(store):
 
 def test_dry_run_reports_and_writes_nothing(store):
     s3 = FakeS3()
-    go(Options(season=2026, week=9), store, season_2026_api(), s3)
+    go(Options(season=2026, week=10), store, season_2026_api(), s3)
     puts, ratings = len(s3.puts), store.query("SELECT * FROM ratings")
-    code, lines = go(Options(season=2026, weeks=(9, 10), no_ingest=True, dry_run=True), store, None, None)
+    code, lines = go(Options(season=2026, weeks=(10, 11), no_ingest=True, dry_run=True), store, None, None)
     assert code == 0 and len(s3.puts) == puts and store.query("SELECT * FROM ratings") == ratings
     text = "\n".join(lines)
-    assert "WEEKLY_DRY_RUN season=2026 week=9" in text and "WEEKLY_DRY_RUN season=2026 week=10" in text
-    assert "'unchanged': 59" in text and "'new': 59" in text  # week 9 is stored and unchanged, week 10 is new
-    assert "cbb/rankings/2026/week-10.json" in text and "WEEKLY_OK" not in text
-    assert count(store, where="week = 10") == 0
+    assert "WEEKLY_DRY_RUN season=2026 week=10" in text and "WEEKLY_DRY_RUN season=2026 week=11" in text
+    assert "'unchanged': 59" in text and "'new': 59" in text  # week 10 is stored and unchanged, week 11 is new
+    assert "cbb/rankings/2026/week-11.json" in text and "WEEKLY_OK" not in text
+    assert count(store, where="week = 11") == 0
 
 
 # -- the Monday with a stored prior season ----------------------------------------------------------------
@@ -647,9 +663,10 @@ def test_the_prior_season_requirement_applies_to_catch_up_weeks(store):
     api, s3 = season_2026_api(), FakeS3()
     assert go(Options(season=2026, weeks=(1, 4), allow_missing_prior=True), store, api, s3)[0] == 0
     puts_before = len(s3.puts)
-    # Monday 2025-12-22 resolves to week 7 (no prior needed) but weeks 5 and 6 are missing and do need season 2025
+    # Monday 2025-12-22 resolves to week 7; weeks 5 and 6 are missing, and all three need season 2025
+    # (the basketball prior fades out at week 10)
     code, lines = go(Options(), store, api, s3, today=date(2025, 12, 22))
-    assert code == 1 and any(ln.startswith("PRIOR_FAILURE:") and "weeks 5-6" in ln and "Backfill season 2025" in ln for ln in lines)
+    assert code == 1 and any(ln.startswith("PRIOR_FAILURE:") and "weeks 5-7" in ln and "Backfill season 2025" in ln for ln in lines)
     assert count(store, where="week > 4") == 0 and len(s3.puts) == puts_before
     code, lines = go(Options(allow_missing_prior=True), store, api, s3, today=date(2025, 12, 22))
     assert code == 0 and ok_weeks(lines) == [f"WEEKLY_OK season=2026 week={w}" for w in (5, 6, 7)]

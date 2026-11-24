@@ -7,10 +7,15 @@ Minimise, over one rating r_t per D-I team and one shared rating r_lower for non
   + gamma_lower  * sum_l pos(r_team + margin_l*alpha_l - r_lower)^2    (D-I losses to non-D-I; raw margin)
   + lambda       * sum_t (r_t - prior_t)^2
 
-subject to r_min <= r_t <= r_max and r_lower_min <= r_lower <= r_lower_max. This is football's
-program term for term; the only difference in construction is that the ~6,000 `pos(...)**2`
-terms are built as three matrix expressions instead of scalar by scalar, which cuts CVXPY
-canonicalization from seconds to well under one second (README.md, "Parity").
+subject to r_t <= r_max (and r_t >= r_min only when `r_min` is set; production and football have
+no lower bound) and r_lower_min <= r_lower <= r_lower_max. This is football's program term for
+term; the only difference in construction is that the ~6,000 `pos(...)**2` terms are built as
+three matrix expressions instead of scalar by scalar, which cuts CVXPY canonicalization from
+seconds to well under one second (README.md, "Parity").
+
+The ratings returned are the RAW solve. The published scale (one constant shift so the lowest team
+reads `display_min`) is applied by `model.pipeline`, never here, because the prior-season solve is
+fed back raw.
 
 Undetermined ratings (README.md, "Undetermined ratings"). With lambda = 0 a team with no loss has
 no term that pins its rating, and r_lower is pinned only by an active lower-division hinge. Under
@@ -43,6 +48,10 @@ class ModelSolveError(RuntimeError):
 # tight: relative to the objective, with an absolute floor for objectives near zero.
 FLAT_OBJECTIVE_RTOL = 1e-8
 FLAT_OBJECTIVE_ATOL = 1e-8
+# "min_feasible" value of an undetermined team that nothing bounds below (no D-I win and no r_min):
+# its optimal set is (-inf, r_max]. The loss-rate penalty anchors the scale at zero, so zero is
+# the natural point; OSQP, which starts at zero and gets no gradient, also returns about zero.
+UNCONSTRAINED_RATING = 0.0
 
 
 class SolverStatusError(ModelSolveError):
@@ -51,7 +60,7 @@ class SolverStatusError(ModelSolveError):
 
 @dataclass(frozen=True)
 class SolveResult:
-    ratings: dict[int, float]  # D-I teams only; the dummy team is never here
+    ratings: dict[int, float]  # RAW solve, D-I teams only; the dummy team is never here
     r_lower: float  # the dummy rating; flat when no lower-division hinge is active (least value under "min_feasible")
     objective: float
     margin_term: float
@@ -61,7 +70,6 @@ class SolveResult:
     lam: float  # prior weight used (0.0 when the prior term was off)
     k_margin: float
     median_used: float
-    margin_scale_basis: str
     n_capped: int  # D-I games whose demanded gap hit max_gap_from_margin
     solver: str
     status: str
@@ -101,7 +109,8 @@ def _least_optimal(rv, r_low, flat, *, loser_idx, winner_idx, demand, low_idx, l
     is non-increasing in its own rating and is zero from T = max(r_loser + d) on: its optimal set is
     [max(T, r_min), r_max] when T < r_max, and just {r_max} otherwise (the rating is then
     determined, at the bound, and the solver's value is kept like every other determined rating).
-    With no D-I win, T = -inf and the least value is r_min. r_lower is the same with the
+    With no D-I win, T = -inf: the least value is r_min, or, with no lower bound (production), the
+    set is unbounded below and UNCONSTRAINED_RATING is used. r_lower is the same with the
     lower-division hinges, whose teams are all determined. README.md, "Undetermined ratings", has
     the proof."""
     threshold = np.full(len(rv), -np.inf)
@@ -109,7 +118,8 @@ def _least_optimal(rv, r_low, flat, *, loser_idx, winner_idx, demand, low_idx, l
         np.maximum.at(threshold, winner_idx, rv[loser_idx] + demand)
     out = rv.copy()
     free = flat & (threshold < config.r_max)  # flat and not pinned at r_max
-    out[free] = np.maximum(threshold[free], config.r_min)
+    least = threshold if config.r_min is None else np.maximum(threshold, config.r_min)
+    out[free] = np.where(np.isneginf(least[free]), UNCONSTRAINED_RATING, least[free])
     lower_threshold = float(np.max(rv[low_idx] + low_demand)) if config.gamma_lower > 0 and len(low_idx) else -np.inf
     if lower_threshold < config.r_lower_max:
         r_low = max(lower_threshold, config.r_lower_min)
@@ -117,11 +127,10 @@ def _least_optimal(rv, r_low, flat, *, loser_idx, winner_idx, demand, low_idx, l
 
 
 def _margin_scale(games: Sequence[Game], config: ModelConfig) -> tuple[float, float]:
-    """(median_used, k). `alpha` reproduces football's indexing bug; `margin` is the documented formula."""
-    if config.margin_scale_basis == "alpha":
-        values = [abs(g.alpha) for g in games]
-    else:
-        values = [abs(g.margin) for g in games]
+    """(median_used, k): football's `model/margin_scale.py`. The median is over the margins of the
+    D-I vs D-I played games being rated (negative margins left out, as football does; stored
+    margins are never negative), `median_fallback` when there are none."""
+    values = [float(g.margin) for g in games if g.margin >= 0]
     median = float(np.median(values)) if values else config.median_fallback
     k = config.target_gap_for_median / max(np.sqrt(median), config.sqrt_floor)
     return median, float(k)
@@ -208,7 +217,9 @@ def _solve_once(
     if lam > 0:
         terms.append(lam * cp.sum_squares(r - prior_vec))
     objective = cp.Minimize(cp.sum(terms) if terms else cp.Constant(0.0))
-    constraints = [r >= config.r_min, r <= config.r_max, r_lower >= config.r_lower_min, r_lower <= config.r_lower_max]
+    constraints = [r <= config.r_max, r_lower >= config.r_lower_min, r_lower <= config.r_lower_max]
+    if config.r_min is not None:
+        constraints.append(r >= config.r_min)
     problem = cp.Problem(objective, constraints)
     built = time.perf_counter()
 
@@ -266,7 +277,6 @@ def _solve_once(
         lam=lam,
         k_margin=k,
         median_used=median,
-        margin_scale_basis=config.margin_scale_basis,
         n_capped=n_capped,
         solver=stats.solver_name if stats and stats.solver_name else config.solver,
         status=problem.status,

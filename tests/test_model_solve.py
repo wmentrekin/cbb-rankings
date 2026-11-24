@@ -9,13 +9,13 @@ from scipy.optimize import minimize
 
 from ingest.derive import compute_alpha, derive_result
 from model.assemble import Game, LowerLoss, assemble
-from model.config import FOOTBALL_COMPAT
-from model.pipeline import NoTeamsError, rate_week
+from model.config import BASKETBALL_DEFAULT, FOOTBALL_COMPAT
+from model.pipeline import NoTeamsError, rate_week, shift_to_display
 from model.solve import ModelSolveError, solve
 from tests.football_adapter import build
 
-# Explicit config so these tests do not depend on the provisional basketball basis choice.
-CFG = dataclasses.replace(FOOTBALL_COMPAT, solver="CLARABEL", margin_scale_basis="margin")
+# Football's constants with CLARABEL (interior point, accurate) so the hand-checked values are tight.
+CFG = dataclasses.replace(FOOTBALL_COMPAT, solver="CLARABEL")
 LOWER_ID = 900
 
 
@@ -48,11 +48,15 @@ def test_lower_division_loss_lowers_the_loser_and_wins_do_not_enter_the_objectiv
 def test_lower_division_term_uses_raw_margin_times_alpha_without_scaling_or_cap():
     # One D-I team that lost to the dummy by 40 at alpha 1.2 (gap 48, far above the 20 cap).
     # With r_lower pinned at its bound 15 the minimiser of 5*pos(r + 48 - 15)^2 + 0.5*(1*r)^2 is
-    # r = 0.01 (floor), and the term value is 5 * (0.01 + 48 - 15)^2.
+    # 10*(r + 33) + r = 0, r = -30 (no floor), and the term value is 5 * (-30 + 48 - 15)^2 = 45.
     res = solve([], [LowerLoss(1, 40, 1.2)], {1: (0, 1)}, [1], None, 10, CFG)
-    assert res.ratings[1] == pytest.approx(0.01, abs=1e-6)
+    assert res.ratings[1] == pytest.approx(-30.0, abs=1e-6)
     assert res.r_lower == pytest.approx(15.0, abs=1e-6)
-    assert res.lower_term == pytest.approx(5 * (0.01 + 48 - 15) ** 2, rel=1e-6)
+    assert res.lower_term == pytest.approx(45.0, rel=1e-6)
+    # With football's former floor (r_min 0.01) the same problem stops at the bound.
+    floored = solve([], [LowerLoss(1, 40, 1.2)], {1: (0, 1)}, [1], None, 10, dataclasses.replace(CFG, r_min=0.01))
+    assert floored.ratings[1] == pytest.approx(0.01, abs=1e-6)
+    assert floored.lower_term == pytest.approx(5 * (0.01 + 48 - 15) ** 2, rel=1e-6)
 
 
 def test_home_win_neutral_and_away_win_alpha_change_the_demanded_gap():
@@ -75,6 +79,15 @@ def test_prior_pulls_toward_priors_before_the_fade_week_and_vanishes_at_it():
     for week in (7, 8, 19):
         res = solve([], [], {1: (0, 0)}, [1], {1: 50.0}, week, CFG)
         assert res.lam == 0.0 and res.prior_term == 0.0
+
+
+def test_basketball_prior_stays_on_through_week_9():
+    cfg = dataclasses.replace(BASKETBALL_DEFAULT, solver="CLARABEL")
+    for week in range(1, 10):
+        res = solve([], [], {1: (0, 0)}, [1], {1: 50.0}, week, cfg)
+        assert res.lam == pytest.approx((10 - week) / 1050)
+        assert res.ratings[1] == pytest.approx(50.0, abs=1e-4)
+    assert solve([], [], {1: (0, 0)}, [1], {1: 50.0}, 10, cfg).lam == 0.0
 
 
 def test_prior_changes_the_solution_only_while_lambda_is_positive():
@@ -103,7 +116,7 @@ def test_team_with_no_games_is_a_variable_with_a_defined_rating():
     assert set(res.ratings) == set(teams)
     assert res.ratings[3] == pytest.approx(1.0, abs=1e-4)  # pulled to default_prior while lambda > 0
     late = solve(games, [], {1: (1, 0), 2: (0, 1), 3: (0, 0)}, teams, {}, 10, CFG)
-    assert CFG.r_min - 1e-6 <= late.ratings[3] <= CFG.r_max + 1e-6  # flat, but inside the bounds
+    assert late.ratings[3] <= CFG.r_max + 1e-6  # flat: any value up to r_max is optimal (no floor)
 
 
 def test_season_without_lower_division_losses_solves():
@@ -133,7 +146,7 @@ def test_first_season_with_no_prior_data_rates_every_team_from_default_prior(sto
     store.upsert("games", [g for g in game_rows if g["season"] == season], ("id",))
     out = rate_week(store, season, 3, FOOTBALL_COMPAT)
     assert out.prior_solve is None
-    assert out.solve.n_default_priors == len(out.ratings)
+    assert out.solve.n_default_priors == len(out.raw_ratings)
     assert any("no prior-season data" in w for w in out.warnings)
     assert out.solve.lam == pytest.approx(4 / 700)
 
@@ -167,7 +180,7 @@ def test_rate_week_rates_a_team_with_no_games(store):
     store.upsert("teams", team_rows, ("id", "season"))
     store.upsert("games", game_rows, ("id",))
     out = rate_week(store, 2024, 3, FOOTBALL_COMPAT)
-    assert out.records[5000] == (0, 0) and 5000 in out.ratings
+    assert out.records[5000] == (0, 0) and 5000 in out.raw_ratings and 5000 in out.published_ratings
 
 
 @pytest.mark.parametrize("status", ["infeasible", "unbounded", "optimal_inaccurate", "solver_error"])
@@ -231,7 +244,7 @@ def test_inputs_must_be_consistent():
         solve([], [], {}, [1], None, 0, CFG)
 
 
-# --- margin_scale_basis -------------------------------------------------------------------
+# --- margin scale (football 40a6b4f, model/margin_scale.py) ----------------------------------------
 
 # Hand calculation. Margins 1, 4, 9, 400 -> median (4 + 9) / 2 = 6.5; k = 7 / sqrt(6.5) = 2.74563.
 # Demanded gaps min(k * sqrt(margin), 20) * alpha: margin 1 -> k = 2.7456 (x1.0); margin 4 -> 2k = 5.4913
@@ -255,14 +268,13 @@ def independent_minimum(demands, priors_weight):
         total += priors_weight * sum((rating[t] - 1.0) ** 2 for t in rating)
         return total
 
-    out = minimize(f, np.full(4, 5.0), bounds=[(0.01, 100)] * 4, method="L-BFGS-B", options={"ftol": 1e-15, "gtol": 1e-10})
+    out = minimize(f, np.full(4, 5.0), bounds=[(None, 100)] * 4, method="L-BFGS-B", options={"ftol": 1e-15, "gtol": 1e-10})
     return out.fun, dict(zip((1, 2, 3, 4), out.x))
 
 
-def test_margin_basis_uses_the_median_of_real_margins_hand_calculated():
+def test_margin_scale_uses_the_median_of_real_margins_hand_calculated():
     res = solve(HAND_GAMES, [], HAND_RECORDS, [1, 2, 3, 4], HAND_PRIORS, 1, CFG)
     k = 7 / np.sqrt(6.5)
-    assert res.margin_scale_basis == "margin"
     assert res.median_used == 6.5
     assert res.k_margin == pytest.approx(k, rel=1e-12) and res.k_margin == pytest.approx(2.74563, abs=1e-5)
     assert res.n_capped == 1  # only the 400-point game
@@ -271,17 +283,6 @@ def test_margin_basis_uses_the_median_of_real_margins_hand_calculated():
     assert res.objective == pytest.approx(fun, rel=1e-6)
     for t in (1, 2, 3, 4):
         assert res.ratings[t] == pytest.approx(ratings[t], abs=1e-3)
-
-
-def test_alpha_basis_uses_the_median_of_alpha_on_the_same_games():
-    cfg = dataclasses.replace(CFG, margin_scale_basis="alpha")
-    res = solve(HAND_GAMES, [], HAND_RECORDS, [1, 2, 3, 4], HAND_PRIORS, 1, cfg)
-    assert res.median_used == 1.0  # median(0.8, 1.0, 1.0, 1.2): football's actual quantity
-    assert res.k_margin == pytest.approx(7.0)
-    assert res.n_capped == 2  # 7*sqrt(9)=21 and 7*sqrt(400)=140 exceed the cap
-    # k = 7 gives the margin-1 game gap 7*1 = 7, not 2.7456, so the two bases are visibly different.
-    base = solve(HAND_GAMES, [], HAND_RECORDS, [1, 2, 3, 4], HAND_PRIORS, 1, CFG)
-    assert res.objective != pytest.approx(base.objective, rel=1e-3)
 
 
 def test_margin_basis_fallback_and_floor():
@@ -293,14 +294,38 @@ def test_margin_basis_fallback_and_floor():
     assert solve([Game(1, 2, 0, 1.0)], [], {1: (1, 0), 2: (0, 1)}, [1, 2], None, 1, CFG).k_margin == pytest.approx(7.0 / 1e-6)
 
 
-def test_basis_switch_is_live_on_the_football_fixture():
+def test_football_compat_scales_by_the_median_margin_on_the_fixture():
     ids, team_rows, game_rows = build()
     teams = [t["id"] for t in team_rows if t["season"] == 2024]
     a = assemble([g for g in game_rows if g["season"] == 2024 and g["is_rated"]], teams)
-    by_alpha = solve(a.games, a.lower_losses, a.records, teams, {}, 15, FOOTBALL_COMPAT)
-    by_margin = solve(a.games, a.lower_losses, a.records, teams, {}, 15, dataclasses.replace(FOOTBALL_COMPAT, margin_scale_basis="margin"))
-    assert by_alpha.median_used in (0.8, 0.9, 1.0, 1.1, 1.2)
-    assert by_margin.median_used == float(np.median([g.margin for g in a.games])) > 5
-    assert by_margin.k_margin < by_alpha.k_margin
-    assert by_margin.n_capped < by_alpha.n_capped
-    assert by_margin.objective != pytest.approx(by_alpha.objective, rel=1e-3)
+    res = solve(a.games, a.lower_losses, a.records, teams, {}, 15, FOOTBALL_COMPAT)
+    assert res.median_used == float(np.median([g.margin for g in a.games])) > 5
+    assert res.k_margin == pytest.approx(7.0 / np.sqrt(res.median_used), rel=1e-15)
+    assert res.n_capped == 1  # only the 180-point game: the cap binds above median * (20/7)^2
+    assert min(res.ratings.values()) < 0  # no floor
+
+
+def test_the_display_shift_moves_every_team_by_one_constant_to_display_min():
+    published, shift = shift_to_display({1: 3.0, 2: -2.0, 3: 0.5}, FOOTBALL_COMPAT)
+    assert shift == pytest.approx(2.01) and published == pytest.approx({1: 5.01, 2: 0.01, 3: 2.51})
+    raw = {1: 3.0, 2: -2.0}
+    assert shift_to_display(raw, dataclasses.replace(FOOTBALL_COMPAT, display_min=None)) == (raw, 0.0)
+    assert shift_to_display({}, FOOTBALL_COMPAT) == ({}, 0.0)
+
+
+def test_rate_week_publishes_shifted_ratings_and_feeds_the_prior_raw(store, monkeypatch):
+    ids, team_rows, game_rows = build()
+    store.upsert("teams", team_rows, ("id", "season"))
+    store.upsert("games", game_rows, ("id",))
+    import model.pipeline as pipeline
+
+    seen = []
+    real = pipeline.solve
+    monkeypatch.setattr(pipeline, "solve", lambda *a, **k: seen.append(a[4]) or real(*a, **k))
+    out = rate_week(store, 2024, 3, FOOTBALL_COMPAT)
+    assert seen[1] == out.prior_solve.ratings  # the main solve got the prior solve's RAW ratings
+    assert min(out.prior_solve.ratings.values()) < 0  # ... which are not shifted
+    assert out.raw_ratings == out.solve.ratings
+    assert min(out.published_ratings.values()) == pytest.approx(0.01, abs=1e-12)
+    for t, raw in out.raw_ratings.items():
+        assert out.published_ratings[t] == pytest.approx(raw + out.display_shift, abs=1e-12)

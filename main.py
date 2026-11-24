@@ -28,7 +28,8 @@ The override file is validated first (OVERRIDE_FAILURE), before any API call or 
                                                              (rows it wrote are followed by apply_overrides)
     apply_overrides                       OVERRIDE_FAILURE   a known-wrong game must not be rated
     catch-up weeks (default mode)         CATCHUP_FAILURE    too many weeks without ratings
-    prior season present (weeks 1-6)      PRIOR_FAILURE      back-fill season S-1 first, or --allow-missing-prior
+    prior season present (prior weight    PRIOR_FAILURE      back-fill season S-1 first, or --allow-missing-prior
+      > 0: weeks before prior_fade_weeks)
     rate_week                             MODEL_FAILURE      ModelSolveError / NoTeamsError
     write ratings (or ratings_staging)    WRITE_FAILURE
     publish artifacts to R2               PUBLISH_FAILURE    ratings stay written, nothing is swallowed
@@ -53,6 +54,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import statistics
 import sys
 import time
 from dataclasses import dataclass
@@ -104,7 +106,6 @@ CATCHUP_FAILURE_MARKER = "CATCHUP_FAILURE"
 WARNING_MARKER = "WEEKLY_WARNING"
 
 RATING_DECIMALS = 6  # stored precision: solver noise below this must not rewrite D1 rows
-FLOOR_TOLERANCE = 1e-6
 RATINGS_KEY = ("team_id", "season", "week")
 # One JSON parameter carries the integers (D1's REST API would turn bound integers into REALs).
 DELETE_STALE_SQL = (
@@ -212,12 +213,13 @@ def prior_season_available(store: Store, season: int) -> bool:
 
 
 def ratings_rows(result: RatingsResult) -> list[dict[str, Any]]:
+    """The stored rows: the PUBLISHED ratings (raw solve + display shift), never the raw ones."""
     rows = []
-    for team_id in sorted(result.ratings):
+    for team_id in sorted(result.published_ratings):
         wins, losses = result.records.get(team_id, (0, 0))
         rows.append({
             "team_id": int(team_id), "season": result.season, "week": result.week,
-            "rating": round(float(result.ratings[team_id]), RATING_DECIMALS),
+            "rating": round(float(result.published_ratings[team_id]), RATING_DECIMALS),
             "wins": int(wins), "losses": int(losses),
         })
     return rows
@@ -358,7 +360,7 @@ def _run_week(
         raise RunFailure(MODEL_FAILURE_MARKER, f"season {season} week {week}: {type(exc).__name__}: {exc}") from exc
     rows = ratings_rows(result)
     solve = result.solve
-    floor = sum(1 for r in result.ratings.values() if r <= result.config.r_min + FLOOR_TOLERANCE)
+    raw = sorted(result.raw_ratings.values())
 
     plan = None
     stats = WriteStats()
@@ -396,9 +398,10 @@ def _run_week(
         ("teams_rated", len(rows)),
         ("model_status", solve.status),
         ("solve_seconds", f"{solve.solve_seconds:.2f} (build {solve.build_seconds:.2f}, total {result.seconds:.2f})"),
-        ("margin_median_and_k", f"{solve.median_used:g} and {solve.k_margin:.4f} ({solve.margin_scale_basis})"),
+        ("margin_median_and_k", f"{solve.median_used:g} and {solve.k_margin:.4f}"),
         ("capped_games", f"{solve.n_capped} of {solve.n_games}"),
-        ("teams_at_floor", floor),
+        ("raw_rating_range", f"{raw[0]:.4f} to {raw[-1]:.4f} (median {statistics.median(raw):.4f})" if raw else "none"),
+        ("display_shift", f"{result.display_shift:+.4f} (published = raw + shift; lowest team reads {result.config.display_min})"),
         ("n_flat_teams", f"{solve.n_flat_teams} (teams with no losses; undetermined when prior_lambda is 0)"),
         ("r_lower", f"{solve.r_lower:.4f}"),
         ("prior_lambda", solve.lam),
@@ -554,7 +557,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-catch-up", type=int, default=DEFAULT_MAX_CATCH_UP, metavar="N",
                         help="default mode: most earlier weeks without ratings to rate and publish first (default %(default)s)")
     parser.add_argument("--allow-missing-prior", action="store_true",
-                        help="do not fail when the prior season is not stored (weeks 1-6 then rate without priors)")
+                        help="do not fail when the prior season is not stored (weeks 1-"
+                             f"{BASKETBALL_DEFAULT.prior_fade_weeks - 1}, where the prior weight is > 0, then rate without priors)")
     return parser
 
 
