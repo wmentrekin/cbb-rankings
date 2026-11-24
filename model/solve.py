@@ -20,6 +20,7 @@ exactly as solved and the objective is verified unchanged.
 """
 from __future__ import annotations
 
+import dataclasses
 import time
 from dataclasses import dataclass, field
 from typing import Mapping, Sequence
@@ -42,6 +43,10 @@ class ModelSolveError(RuntimeError):
 # tight: relative to the objective, with an absolute floor for objectives near zero.
 FLAT_OBJECTIVE_RTOL = 1e-8
 FLAT_OBJECTIVE_ATOL = 1e-8
+
+
+class SolverStatusError(ModelSolveError):
+    """The solver raised or did not report an acceptable status (as opposed to a failed check)."""
 
 
 @dataclass(frozen=True)
@@ -122,7 +127,7 @@ def _margin_scale(games: Sequence[Game], config: ModelConfig) -> tuple[float, fl
     return median, float(k)
 
 
-def solve(
+def _solve_once(
     games: Sequence[Game],
     lower_division_losses: Sequence[LowerLoss],
     records: Mapping[int, tuple[int, int]],
@@ -210,12 +215,12 @@ def solve(
     try:
         problem.solve(solver=config.solver, verbose=False)
     except (cp.error.SolverError, cp.error.DCPError) as exc:
-        raise ModelSolveError(f"solver {config.solver} failed: {exc}") from exc
+        raise SolverStatusError(f"solver {config.solver} failed: {exc}") from exc
     solved = time.perf_counter()
 
     ok = {cp.OPTIMAL} | ({cp.OPTIMAL_INACCURATE} if config.accept_inaccurate else set())
     if problem.status not in ok:
-        raise ModelSolveError(f"solver {config.solver} returned status {problem.status!r}, not 'optimal'")
+        raise SolverStatusError(f"solver {config.solver} returned status {problem.status!r}, not 'optimal'")
     if r.value is None or r_lower.value is None:
         raise ModelSolveError(f"solver {config.solver} returned no values (status {problem.status!r})")
 
@@ -281,3 +286,33 @@ def solve(
         flat_objective_change=objective_change,
         warnings=warnings,
     )
+
+
+def solve(
+    games: Sequence[Game],
+    lower_division_losses: Sequence[LowerLoss],
+    records: Mapping[int, tuple[int, int]],
+    team_ids: Sequence[int],
+    priors: Mapping[int, float] | None,
+    week: int,
+    config: ModelConfig,
+) -> SolveResult:
+    """Rate `team_ids` with `config.solver`. If that solver does not reach `optimal` and
+    `config.fallback_solver` is set, solve again with the fallback solver and the least-optimal
+    rule for undetermined ratings, and record a warning. The fallback pairing is deliberate: on
+    real data OSQP's ratings for unbeaten teams match the least-optimal values to about two
+    decimals, while an interior-point solver alone puts them mid-range, tens of points higher."""
+    args = (games, lower_division_losses, records, team_ids, priors, week)
+    try:
+        return _solve_once(*args, config)
+    except SolverStatusError as exc:
+        if not config.fallback_solver or config.fallback_solver == config.solver:
+            raise
+        fallback = dataclasses.replace(
+            config, solver=config.fallback_solver, flat_rating_rule="min_feasible", fallback_solver=None
+        )
+        result = _solve_once(*args, fallback)
+        result.warnings.append(
+            f"{exc}; solved with fallback {config.fallback_solver} and the least-optimal rule instead"
+        )
+        return result

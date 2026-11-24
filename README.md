@@ -270,8 +270,10 @@ listing. A full-season ratings backfill is 365 x 19 = 6,935 D1 rows and no API c
 football). `model.pipeline.rate_week(store, season, week)` reads a season from the store and
 returns ratings, records and diagnostics without writing anything. Proven against golden outputs of
 the real football code (`tests/test_model_parity.py`). The margin-scale basis is the true median
-margin (owner decision 2026-11-23), set in one line in `model/config.py`; an unbeaten team is rated
-just high enough to explain its wins (`flat_rating_rule="min_feasible"`).
+margin (owner decision 2026-11-23), set in one line in `model/config.py`. Production runs football's
+solver (OSQP) and, like football, takes the solver's value for ratings the objective leaves
+undetermined (owner decision 2026-11-24); if OSQP does not reach `optimal`, the run falls back to
+CLARABEL with the least-optimal rule and records a warning.
 
 ## Setup
 

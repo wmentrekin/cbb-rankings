@@ -34,21 +34,25 @@ def test_football_compat_equals_every_football_constant():
     assert FOOTBALL_COMPAT.margin_scale_basis == "alpha"  # football's actual behavior
     assert FOOTBALL_COMPAT.accept_inaccurate is False
     assert FOOTBALL_COMPAT.flat_rating_rule == "solver"  # quirk 13: whatever the solver returns
+    assert FOOTBALL_COMPAT.fallback_solver is None  # football has no second solver
 
 
 def test_every_config_field_is_covered_by_the_pin():
-    pinned = set(FOOTBALL_VALUES) | {"alpha", "solver", "margin_scale_basis", "accept_inaccurate", "flat_rating_rule"}
+    pinned = set(FOOTBALL_VALUES) | {"alpha", "solver", "margin_scale_basis", "accept_inaccurate", "flat_rating_rule", "fallback_solver"}
     assert {f.name for f in dataclasses.fields(ModelConfig)} == pinned
 
 
-def test_basketball_default_differs_from_football_only_in_solver_basis_and_flat_rule():
+def test_basketball_default_differs_from_football_only_in_basis_and_fallback():
     differing = {
         f.name for f in dataclasses.fields(ModelConfig)
         if getattr(BASKETBALL_DEFAULT, f.name) != getattr(FOOTBALL_COMPAT, f.name)
     }
-    assert differing == {"solver", "margin_scale_basis", "flat_rating_rule"}
-    assert BASKETBALL_DEFAULT.flat_rating_rule == "min_feasible"
-    assert BASKETBALL_DEFAULT.solver == "CLARABEL" != FOOTBALL_COMPAT.solver
+    # Owner decision (2026-11-24): football's solver and football's handling of undetermined
+    # ratings. The margin basis differs only until football's indexing bug is fixed there.
+    assert differing == {"margin_scale_basis", "fallback_solver"}
+    assert BASKETBALL_DEFAULT.solver == FOOTBALL_COMPAT.solver == "OSQP"
+    assert BASKETBALL_DEFAULT.flat_rating_rule == FOOTBALL_COMPAT.flat_rating_rule == "solver"
+    assert BASKETBALL_DEFAULT.fallback_solver == "CLARABEL" and FOOTBALL_COMPAT.fallback_solver is None
     assert BASKETBALL_DEFAULT.accept_inaccurate is False
 
 

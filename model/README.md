@@ -50,9 +50,10 @@ term off (and the same `flat_rating_rule`). Teams absent from the prior season g
 | `default_prior` | 1 | same |
 | `alpha` | `ingest.derive.DEFAULT_ALPHA` (1.0 / 0.8 / 1.2) | same |
 | `accept_inaccurate` | False | False |
-| `solver` | OSQP (CVXPY's implicit choice for the goldens) | CLARABEL |
+| `solver` | OSQP (CVXPY's implicit choice for the goldens) | OSQP, named |
+| `fallback_solver` | none | CLARABEL (used only if OSQP does not reach `optimal`) |
 | `margin_scale_basis` | `"alpha"` | `"margin"` (owner decision 2026-11-23) |
-| `flat_rating_rule` | `"solver"` | `"min_feasible"` |
+| `flat_rating_rule` | `"solver"` | `"solver"` (`"min_feasible"` is opt-in and the fallback's rule) |
 
 `tests/test_model_config.py` pins every football value and asserts `BASKETBALL_DEFAULT` differs
 from `FOOTBALL_COMPAT` exactly in `solver`, `margin_scale_basis` and `flat_rating_rule`, so a
@@ -95,8 +96,8 @@ Numbers refer to "Known quirks" in `tests/reference/README.md`.
 | 10 | prior solve runs every week | skipped when lambda is 0 |
 | 11 | any status except infeasible/unbounded accepted; prior solve can hit `UnboundLocalError` | only `optimal` accepted; anything else, or a solver error, raises `ModelSolveError`. `accept_inaccurate=True` also admits `optimal_inaccurate` |
 | 12 | row order from unordered SQL | games sorted by id; results do not depend on row order |
-| 13 | flat ratings of zero-loss teams at lambda 0 are whatever the solver returns | `flat_rating_rule="min_feasible"`: the least optimal value, deterministic and solver-independent (see "Undetermined ratings"); `FOOTBALL_COMPAT` keeps `"solver"` |
-| solver | CVXPY's default (OSQP) | CLARABEL, named; OSQP hits its iteration cap on a 365-team prior solve |
+| 13 | flat ratings of zero-loss teams at lambda 0 are whatever the solver returns | kept: same solver, same behavior (see "Undetermined ratings"); a deterministic `"min_feasible"` rule exists as an opt-in and for the fallback solve |
+| solver | CVXPY's default (OSQP) | OSQP, named, with a CLARABEL fallback: football accepts an inaccurate solve silently, basketball retries with the fallback and fails loudly if that fails too |
 | build | ~6,000 scalar `pos(...)**2` terms | the same terms as three matrix expressions (parity holds; build and solve fall from about 17 s to about 0.3 s per problem) |
 
 Kept as in football: quirk 7 (the lower-division term is uncapped and unscaled), the 20-point cap
@@ -135,7 +136,15 @@ over D-I losses to non-D-I teams when `M < r_lower_max`, else the bound `r_lower
 values and these intervals, so it has a componentwise least point; lowering an unbeaten team
 inside its interval changes no other team's optimal rating and no term's value.
 
-**The rule.** `flat_rating_rule="min_feasible"` (owner decision; `BASKETBALL_DEFAULT`) publishes
+**What production does.** By the owner's decision of 2026-11-24 basketball stays with football's
+method: `BASKETBALL_DEFAULT` uses `flat_rating_rule="solver"` with OSQP, so an undetermined rating
+is whatever OSQP returns. On the real 2025-26 season that value matches the least optimal point
+described below to about two decimals at every week checked (OSQP stops as soon as an unbeaten
+team's win hinges reach zero), whereas CLARABEL returns the middle of the interval, 20-40 points
+higher. The closed-form rule below is therefore not used in normal runs; it is the rule the
+fallback solve applies, so that a CLARABEL fallback reproduces what OSQP would have published.
+
+**The rule.** `flat_rating_rule="min_feasible"` (opt-in, and the fallback's rule) publishes
 that least point: an unbeaten team is rated `max(r_min, max over its D-I wins of r_loser + d_g)`,
 just high enough to explain every win by its margin (demanded gap, alpha and the 20-point cap
 included); a team with no D-I win (no games, or only wins over non-D-I teams) gets `r_min`; and

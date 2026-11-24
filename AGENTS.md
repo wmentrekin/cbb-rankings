@@ -139,10 +139,13 @@ uv run pytest -q   # tests
   are frozen yardsticks (`tests/reference/**` is never edited); `BASKETBALL_DEFAULT` may differ only
   where `tests/test_model_config.py` says so. The margin-scale basis is chosen in one line,
   `BASKETBALL_MARGIN_SCALE_BASIS` in `model/config.py` (owner decision 2026-11-23: the true median
-  margin). Undetermined ratings (quirk 13: unbeaten teams at lambda 0) are published at their least
-  optimal value (`flat_rating_rule="min_feasible"`; football keeps `"solver"`).
-- Production solver is CLARABEL, named in config; only status `optimal` is accepted, anything else
-  raises `ModelSolveError` so an unattended run fails loudly. Parity tests pass `solver="OSQP"`.
+  margin). Owner decision 2026-11-24: stay with football's method. Undetermined ratings (quirk 13:
+  unbeaten teams at lambda 0) are whatever the solver returns (`flat_rating_rule="solver"`), as in
+  football; `"min_feasible"` remains as an opt-in and as the fallback's rule.
+- Production solver is OSQP, the solver football runs, named in config. Only status `optimal` is
+  accepted. If OSQP does not reach it, `solve` retries once with `fallback_solver` (CLARABEL) and
+  `"min_feasible"` (which matches OSQP's unbeaten-team ratings to about two decimals on real data)
+  and records a warning; if that fails too, `ModelSolveError` fails the run loudly.
 - The objective is built vectorized; keep it mathematically identical to football's (the parity tests
   are the check). Run `uv run pytest -q` (about 10 s; the 365-team scale test is included).
 

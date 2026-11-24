@@ -15,8 +15,11 @@ from ingest.derive import DEFAULT_ALPHA, AlphaConfig
 MarginScaleBasis = Literal["margin", "alpha"]
 # How a rating the objective leaves undetermined is chosen (model/README.md, "Undetermined ratings"):
 #   "solver":       whatever the solver returns (football's behavior, reference quirk 13).
-#   "min_feasible": the least value among all optimal solutions (owner decision): an unbeaten team is
-#                   rated just high enough to explain its wins by their margins.
+#   "min_feasible": the least value among all optimal solutions, computed in closed form. An opt-in
+#                   alternative, not used in production.
+# Owner decision (2026-11-24): basketball stays with football's method, so production uses "solver"
+# with football's solver. On real data OSQP's answer for unbeaten teams matches "min_feasible" to
+# about two decimals, because OSQP stops as soon as their win hinges reach zero.
 FlatRatingRule = Literal["solver", "min_feasible"]
 
 # The ONE place the basketball margin-scale basis is chosen.
@@ -26,7 +29,9 @@ FlatRatingRule = Literal["solver", "min_feasible"]
 # fixed to match. This one line is the only place the choice is made.
 BASKETBALL_MARGIN_SCALE_BASIS: MarginScaleBasis = "margin"
 
-BASKETBALL_SOLVER = "CLARABEL"
+# Owner decision (2026-11-24): the same solver football runs. Football names no solver and CVXPY
+# picks OSQP for this problem; it is named here so a CVXPY upgrade cannot change it silently.
+BASKETBALL_SOLVER = "OSQP"
 
 
 class ModelConfigError(ValueError):
@@ -59,8 +64,11 @@ class ModelConfig:
     alpha: AlphaConfig = DEFAULT_ALPHA
     solver: str = BASKETBALL_SOLVER
     accept_inaccurate: bool = False
+    # Used only when `solver` does not reach `optimal`: solve again with this solver and the
+    # "min_feasible" rule (see model.solve.solve). None disables it.
+    fallback_solver: str | None = "CLARABEL"
     margin_scale_basis: MarginScaleBasis = BASKETBALL_MARGIN_SCALE_BASIS
-    flat_rating_rule: FlatRatingRule = "min_feasible"
+    flat_rating_rule: FlatRatingRule = "solver"
 
     def __post_init__(self) -> None:
         def need(ok: bool, msg: str) -> None:
@@ -111,6 +119,6 @@ def check_week(week: int) -> int:
 # Football's values, football's implicit solver (OSQP; CVXPY's default for these problems),
 # football's margin-scale behavior and football's solver-chosen flat ratings. Used by the parity
 # tests only.
-FOOTBALL_COMPAT = ModelConfig(solver="OSQP", margin_scale_basis="alpha", flat_rating_rule="solver")
+FOOTBALL_COMPAT = ModelConfig(solver="OSQP", margin_scale_basis="alpha", flat_rating_rule="solver", fallback_solver=None)
 
 BASKETBALL_DEFAULT = ModelConfig()

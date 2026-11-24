@@ -1,6 +1,7 @@
 """A seeded synthetic basketball-sized season (365 teams, about 5,800 rated games, 12 D-I losses to
 lower-division teams) solved with the production default config. Vectorized construction keeps this
 under a few seconds, so it runs in the default suite."""
+import dataclasses
 import time
 
 import numpy as np
@@ -54,10 +55,14 @@ def test_basketball_sized_season_solves_optimal_with_the_default_config(loaded_s
     start = time.perf_counter()
     out = rate_week(loaded_store, SEASON, week, BASKETBALL_DEFAULT)
     elapsed = time.perf_counter() - start
-    assert out.solve.status == "optimal" and out.solve.solver == "CLARABEL"
+    assert out.solve.status == "optimal" and out.solve.solver == "OSQP"
     assert len(out.ratings) == 365
     if week == 3:
+        # OSQP does not converge on this synthetic prior season (it does on the real 2025-26
+        # season), so this also exercises the fallback: CLARABEL with the least-optimal rule.
         assert out.prior_solve is not None and out.prior_solve.status == "optimal"
+        assert out.prior_solve.solver == "CLARABEL" and out.prior_solve.flat_rating_rule == "min_feasible"
+        assert any("fallback CLARABEL" in w for w in out.prior_solve.warnings)
         assert out.prior_solve.n_games > 5000
     else:
         assert out.prior_solve is None
@@ -65,3 +70,10 @@ def test_basketball_sized_season_solves_optimal_with_the_default_config(loaded_s
     values = np.array(list(out.ratings.values()))
     assert values.min() >= BASKETBALL_DEFAULT.r_min - 1e-6 and values.max() <= BASKETBALL_DEFAULT.r_max + 1e-6
     assert elapsed < 30  # measured about 1 s; the scalar-built football formulation needed 12-17 s per problem
+
+
+def test_without_a_fallback_a_non_optimal_solve_raises(loaded_store):
+    from model.solve import ModelSolveError
+
+    with pytest.raises(ModelSolveError, match="not 'optimal'"):
+        rate_week(loaded_store, SEASON, 3, dataclasses.replace(BASKETBALL_DEFAULT, fallback_solver=None))
