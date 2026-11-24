@@ -23,7 +23,7 @@ on:
         type: boolean
         default: false
       allow_missing_prior:
-        description: 'Rate weeks 1-6 even if the prior season is not stored'
+        description: 'Rate weeks 1-9 even if the prior season is not stored'
         type: boolean
         default: false
 
