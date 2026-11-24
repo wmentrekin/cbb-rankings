@@ -3,7 +3,7 @@
 artifact: status
 feature: "cbb-rankings-port"
 mode: "large-initiative"
-stage: "execution"
+stage: "verification"
 owner_skill: work
 
 objective: >
@@ -44,8 +44,8 @@ branching:
   branch_name: "claude/sleepy-tesla-rnjsvt"
 
 summary:
-  current_focus: "Execution: B2-T2 and B3-T1 running; B5 implemented and under review; B1 complete"
-  last_completed: "B1-T3 (5c251c2), B2-T1 (e10840e) in cbb-rankings; B5-T2 (004c922) in personal-site; all pushed"
+  current_focus: "Verification: reviews of B3+B4 (model, weekly run, publishing) and B6 (basketball page) running; B7 deferred until the football margin fix settles"
+  last_completed: "B1-B4 implemented in cbb-rankings (557 tests), B5-B6 in personal-site; all pushed. B1/B2 and B5 each passed one review-fix cycle."
   current_blocker: ""
 
 artifacts:
@@ -231,11 +231,11 @@ agents:
     requested_model_tier: "balanced"
     requested_reasoning: "medium"
     requested_provider_model: "sonnet"
-    actual_model: ""
-    actual_reasoning: ""
+    actual_model: "claude-sonnet-5-5"
+    actual_reasoning: "not independently controllable"
     routing_enforced: true
     escalation_count: 0
-    status: "running"
+    status: "done"
     stage: "execution"
     task: "B3-T1: frozen football reference, fixture, goldens (worktree work/cbb-model)"
     last_update: "2026-11-23"
@@ -246,11 +246,11 @@ agents:
     requested_model_tier: "balanced"
     requested_reasoning: "medium"
     requested_provider_model: "sonnet"
-    actual_model: ""
-    actual_reasoning: ""
+    actual_model: "claude-sonnet-5-5"
+    actual_reasoning: "not independently controllable"
     routing_enforced: true
     escalation_count: 0
-    status: "running"
+    status: "done"
     stage: "verification"
     task: "review B5 commits in personal-site"
     last_update: "2026-11-23"
@@ -261,11 +261,11 @@ agents:
     requested_model_tier: "balanced"
     requested_reasoning: "medium"
     requested_provider_model: "sonnet"
-    actual_model: ""
-    actual_reasoning: ""
+    actual_model: "claude-sonnet-5-5"
+    actual_reasoning: "not independently controllable"
     routing_enforced: true
     escalation_count: 0
-    status: "running"
+    status: "done"
     stage: "execution"
     task: "B2-T2: overrides and backfill"
     last_update: "2026-11-23"
@@ -276,7 +276,7 @@ loops:
     count: 1
     max: 2
   execution_verification:
-    count: 0
+    count: 1
     max: 2
 
 checkpoint:
@@ -303,6 +303,9 @@ decisions:
   - "Owner (G0): same R2 bucket as football, cbb/ prefix."
   - "Owner (G0): will allow api.collegebasketballdata.com in this environment for the probe."
   - "Owner: confirmed trusting the source on non-D-I games (overrides available) and week 1 starting on the opening Monday with earlier games folded in."
+  - "Owner: Clarabel is the named solver; the parity run uses OSQP."
+  - "Owner: asked for the football margin-scale bug to be fixed; basketball therefore uses the documented formula (true median margin). The owner is doing the football fix in a separate session; the agent started here was stopped with no changes to cfb-rankings."
+  - "Orchestrator: weekly run always does a full-season ingest (4 API calls); reported to the owner."
   - "Owner (G1): provided a D1 Edit token (stored on the environment, proxy-injected) and asked the orchestrator to create the database; cbb-rankings D1 database created, id 4670facc-438e-40ce-9841-b4626c6ca3f0. Stay on the free CBBD quota."
 
 model_routing:
@@ -312,6 +315,6 @@ model_routing:
     - "balanced tier resolved to claude-sonnet-5-5 (the map lists Sonnet 5)"
   unresolved_limitations: []
 
-next_action: "Merge work/cbb-model after B3-T1, start B3-T2; act on B5 review; PRs wait for the owner to ask"
+next_action: "Act on the two reviews (cycle 1 of 2 for B3/B4 and B6); PRs only when the owner asks; launch backfill only with owner approval (gate G2)"
 next_recommended_command: "$work"
 user_input_needed: true
