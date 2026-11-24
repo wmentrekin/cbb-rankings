@@ -135,13 +135,19 @@ uv run pytest -q   # tests
   rating key (only `SolveResult.r_lower`).
 - Played = `winner_team_id IS NOT NULL`, rated = `is_rated = 1`; margin and alpha come from the stored
   columns. `week` is an int >= 1.
-- Every constant lives in `model.config.ModelConfig`. `FOOTBALL_COMPAT` and the football-parity tests
-  are frozen yardsticks (`tests/reference/**` is never edited); `BASKETBALL_DEFAULT` may differ only
-  where `tests/test_model_config.py` says so. The margin-scale basis is chosen in one line,
-  `BASKETBALL_MARGIN_SCALE_BASIS` in `model/config.py` (owner decision 2026-11-23: the true median
-  margin). Owner decision 2026-11-24: stay with football's method. Undetermined ratings (quirk 13:
-  unbeaten teams at lambda 0) are whatever the solver returns (`flat_rating_rule="solver"`), as in
-  football; `"min_feasible"` remains as an opt-in and as the fallback's rule.
+- Every constant lives in `model.config.ModelConfig`; its defaults are football @ 40a6b4f and
+  `FOOTBALL_COMPAT = ModelConfig()`. `FOOTBALL_COMPAT` and the football-parity tests are frozen
+  yardsticks (`tests/reference/**` is re-frozen only when football itself changes, as a deliberate
+  task); `BASKETBALL_DEFAULT` differs exactly in `prior_fade_weeks` 10, `prior_fade_scale` 1050,
+  `target_gap_for_median` 5.0 and `fallback_solver` CLARABEL (`tests/test_model_config.py` pins the
+  set). Owner decision 2026-11-24: stay with football's method. No lower bound on team ratings in
+  the solve (`r_min=None`); the dummy keeps 0.01..15. Undetermined ratings (reference quirk 11: unbeaten teams
+  at lambda 0) are whatever the solver returns (`flat_rating_rule="solver"`), as in football;
+  `"min_feasible"` remains as an opt-in and as the fallback's rule.
+- Two scales: `SolveResult.ratings` and priors are RAW; `RatingsResult.published_ratings` (raw +
+  `display_shift`, the lowest team at `display_min` 0.01, computed only by
+  `model.pipeline.shift_to_display`) is what is stored and published. Priors come from re-solving the
+  prior season's games, never from the `ratings` table, and are never shifted.
 - Production solver is OSQP, the solver football runs, named in config. Only status `optimal` is
   accepted. If OSQP does not reach it, `solve` retries once with `fallback_solver` (CLARABEL) and
   `"min_feasible"` (which matches OSQP's unbeaten-team ratings to about two decimals on real data)
@@ -178,9 +184,9 @@ uv run pytest -q   # tests
   Monday decides from `ingest/seasons.json` (window Nov 1 of S-1 through Selection Sunday + 7 days)
   and the stored season row, with no API call. A season with no row is ingested first, then resolved.
 - A week is publishable only if it has ended and is on or before `last_week(row)`.
-  Weeks 1-6 (`ModelConfig.prior_lambda > 0`) require season S-1's teams and rated games in the
-  store (`PRIOR_FAILURE`), unless `--allow-missing-prior`.
-- Ratings are stored rounded to 6 decimals so solver noise does not rewrite D1 rows; the write is
+  Weeks with `BASKETBALL_DEFAULT.prior_lambda > 0` (1-9) require season S-1's teams and rated games
+  in the store (`PRIOR_FAILURE`), unless `--allow-missing-prior`.
+- Stored ratings are the published (shifted) ones, rounded to 6 decimals so solver noise does not rewrite D1 rows; the write is
   `store.upsert` on (team_id, season, week) plus one `DELETE` of that (season, week)'s rows whose team
   is not in the result, with the integers carried in one JSON parameter (`json_extract` / `json_each`,
   never bound integers). Staging runs write `ratings_staging` only.

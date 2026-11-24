@@ -187,7 +187,7 @@ Markers (printed on their own line; each stops the run and exits non-zero unless
 | `INGEST_FAILURE` | `IngestSummary.ok` is false, or the fetch raised (including the quota floor); nothing after it runs, so stale ratings are never republished. Rows the ingest already wrote stay, but the overrides are re-applied first |
 | `OVERRIDE_FAILURE` | an override entry or the file failed; the run stops before the model (a known-wrong game would be rated) |
 | `CATCHUP_FAILURE` | more earlier weeks without ratings than `--max-catch-up` (4): run the "Backfill Ratings" workflow for the season, then rerun |
-| `PRIOR_FAILURE` | weeks 1-6 (prior weight above 0) need season S-1's games stored: backfill it, or pass `--allow-missing-prior` |
+| `PRIOR_FAILURE` | weeks 1-9 (prior weight above 0) need season S-1's games stored: backfill it, or pass `--allow-missing-prior` |
 | `MODEL_FAILURE` | `ModelSolveError` / `NoTeamsError`; nothing written |
 | `WRITE_FAILURE` | the ratings write failed; nothing published, a rerun is idempotent |
 | `PUBLISH_FAILURE` | R2 not configured, or an upload or listing failed; ratings stay written, the site is not rebuilt |
@@ -213,8 +213,7 @@ and `teams`). Reruns are idempotent: unchanged ratings write 0 rows; artifacts a
 
 Artifacts (`artifacts/`): the week payload is built from the STORED `ratings` joined to `teams`, so a
 republish equals the original: `{season, week, generated_at_utc, rankings: [{rank, team, conference,
-logo, record, rating, delta}]}`, ranked by rating descending then team name (case-insensitive) then team id (many teams tie at the
-rating floor, so the order is made explicit), `rating` rounded to 2
+logo, record, rating, delta}]}`, ranked by rating descending then team name (case-insensitive) then team id (equal stored ratings are possible, so the order is made explicit), `rating` rounded to 2
 decimals, `delta` = previous rank minus rank against the greatest earlier week of the season that
 has ratings. R2 keys (prefix `cbb/`; same bucket as football, whose `rankings/` and `schedule/` keys
 are never listed, read or written):
@@ -243,14 +242,14 @@ listing. A full-season ratings backfill is 365 x 19 = 6,935 D1 rows and no API c
    responses): season 2026 (2025-26, the prior of the current season) and season 2027 (2026-27).
    Each is 4 API calls and about 19,000 D1 rows written for a full season (the 2027 slice is smaller
    until the schedule fills in); both on one day stay well under the 100,000 per day limit. Optional:
-   season 2025 (2024-25) as well (4 calls, about 19,000 rows) so that weeks 1-6 of 2025-26 have
+   season 2025 (2024-25) as well (4 calls, about 19,000 rows) so that weeks 1-9 of 2025-26 have
    priors. `ingest/seasons.json` already has the 2025 entry (Selection Sunday 2025-03-16, a Sunday,
-   checked by a test), so the dry run works as it stands. Without season 2025 stored, weeks 1-6 of
+   checked by a test), so the dry run works as it stands. Without season 2025 stored, weeks 1-9 of
    season 2026 can only be rated with `allow_missing_prior` ticked.
 3. Backfill ratings with "Backfill Ratings": staging first (`destination` staging, dry run, then
    apply; then `staging-published` to check the R2 files), then `production`. For the weeks already
    played of 2027 (and `all` for 2026). 0 API calls; D1 rows 365 per week per table (2026: 6,935;
-   2027 weeks 1-3: 1,095), staging and production each; R2 about 5 requests per week. Weeks 1-6 of
+   2027 weeks 1-3: 1,095), staging and production each; R2 about 5 requests per week. Weeks 1-9 of
    2026 need season 2025 stored (step 2, optional), or `allow_missing_prior` ticked. Deltas need the earlier weeks
    stored, so backfill every week from 1.
 4. Confirm Selection Sunday 2027 in `ingest/seasons.json` (currently `provisional`; the date decides
@@ -268,12 +267,16 @@ listing. A full-season ratings backfill is 365 x 19 = 6,935 D1 rows and no API c
 
 `model/` holds the optimization (`model/README.md`: formulation, configuration, differences from
 football). `model.pipeline.rate_week(store, season, week)` reads a season from the store and
-returns ratings, records and diagnostics without writing anything. Proven against golden outputs of
-the real football code (`tests/test_model_parity.py`). The margin-scale basis is the true median
-margin (owner decision 2026-11-23), set in one line in `model/config.py`. Production runs football's
-solver (OSQP) and, like football, takes the solver's value for ratings the objective leaves
-undetermined (owner decision 2026-11-24); if OSQP does not reach `optimal`, the run falls back to
-CLARABEL with the least-optimal rule and records a warning.
+returns raw and published ratings, records and diagnostics without writing anything. Proven against
+golden outputs of the real football code at cfb-rankings 40a6b4f (`tests/test_model_parity.py`).
+As in football there is no lower bound on ratings in the solve, and the stored/published ratings are
+the solve shifted by one constant so the lowest team reads 0.01; prior-season ratings are used raw.
+Production runs football's solver (OSQP) and, like football, takes the solver's value for ratings
+the objective leaves undetermined (owner decision 2026-11-24); if OSQP does not reach `optimal`, the
+run falls back to CLARABEL with the least-optimal rule and records a warning. The differences from
+football are configuration (`BASKETBALL_DEFAULT`): the prior fades out at week 10 (scale 1050), the
+median-margin game demands 5 rating points (half the 2025-26 median margin of 10, football's
+proportion), and the CLARABEL fallback.
 
 ## Setup
 
