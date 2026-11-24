@@ -20,6 +20,11 @@ estimate includes the guards (absent games neutralized, duplicate pairs unrated)
 write through the same upsert; the cost of CHANGED rows is a model not yet verified against
 real D1.
 
+A full-season backfill whose fetch lacks more than a few of the stored games (default: more than
+max(5, 0.5% of them); a truncated fetch looks like that) fails and writes no game rows. If the
+source really removed that many games, pass `--allow-absent N` (N at least the count the failure
+names) and they are neutralized.
+
 A run whose ingest gates fail (`IngestSummary.ok` false: empty fetch, too many dropped rows,
 ...) prints `INGEST_FAILURE: <reasons>`; with --apply nothing is written in that case.
 
@@ -42,7 +47,7 @@ from database.store import Store  # noqa: E402
 from ingest.http import CbbdClient  # noqa: E402
 from ingest.overrides import OVERRIDE_FAILURE_MARKER, OverrideFileError, apply_overrides, load_overrides  # noqa: E402
 from ingest.planning import CachingClient, PlanningStore, override_restore_writes  # noqa: E402
-from ingest.run import IngestSummary, failure_line, ingest_season, ingest_week  # noqa: E402
+from ingest.run import ALLOW_ABSENT_HELP, IngestSummary, failure_line, ingest_season, ingest_week  # noqa: E402
 
 DEFAULT_MAX_ROWS_WRITTEN = 40_000
 MIN_SEASON, MAX_SEASON = 2002, 2100
@@ -56,15 +61,20 @@ def _slice(season: int, week: int | None) -> str:
     return f"season={season}" + (f" week={week}" if week is not None else "")
 
 
-def _ingest(store: Store, season: int, week: int | None, client: Any) -> IngestSummary:
-    return ingest_season(store, season, client) if week is None else ingest_week(store, season, week, client)
+def _ingest(store: Store, season: int, week: int | None, client: Any, allow_absent: int | None = None) -> IngestSummary:
+    if week is None:
+        return ingest_season(store, season, client, max_absent_games=allow_absent)
+    return ingest_week(store, season, week, client)
 
 
 def _emit(report: dict[str, Any]) -> None:
     print(json.dumps(report, indent=2, sort_keys=True))
 
 
-def run(season: int, week: int | None, *, apply: bool, max_rows_written: int, store: Store, client: Any) -> int:
+def run(
+    season: int, week: int | None, *, apply: bool, max_rows_written: int, store: Store, client: Any,
+    allow_absent: int | None = None,
+) -> int:
     label = _slice(season, week)
     spent = "full season: 4 calls" if week is None else "one week: 1 call, 2 if the season has no teams yet"
     print(f"{'APPLY' if apply else 'DRY RUN'} {label}: fetching from the CBBD API, which spends API calls "
@@ -79,7 +89,7 @@ def run(season: int, week: int | None, *, apply: bool, max_rows_written: int, st
     cached = CachingClient(client)
     planner = PlanningStore(store)
     try:
-        plan = _ingest(planner, season, week, cached)
+        plan = _ingest(planner, season, week, cached, allow_absent)
     except Exception as exc:
         log.exception("fetch or ingest failed")
         print(f"{FAILED_MARKER} {label}: {type(exc).__name__}: {exc}")
@@ -115,7 +125,7 @@ def run(season: int, week: int | None, *, apply: bool, max_rows_written: int, st
         return 2
 
     try:
-        summary = _ingest(store, season, week, cached)  # answered from the cache: no new API calls
+        summary = _ingest(store, season, week, cached, allow_absent)  # answered from the cache: no new API calls
         overrides = apply_overrides(store, season)
     except Exception as exc:
         log.exception("apply failed")
@@ -140,6 +150,7 @@ def main(argv: list[str] | None = None, *, store: Store | None = None, client: A
     parser.add_argument("--season", type=int, required=True, help="the year the season ends (2025-26 is 2026)")
     parser.add_argument("--week", type=int, help="only this week's window; omit for the whole season")
     parser.add_argument("--apply", action="store_true", help="write (default is a dry run)")
+    parser.add_argument("--allow-absent", type=int, metavar="N", help=ALLOW_ABSENT_HELP + " (full season only)")
     parser.add_argument("--max-rows-written", type=int, default=DEFAULT_MAX_ROWS_WRITTEN,
                         help="refuse --apply above this estimate (default %(default)s)")
     args = parser.parse_args(argv)
@@ -147,13 +158,15 @@ def main(argv: list[str] | None = None, *, store: Store | None = None, client: A
         parser.error(f"--season must be in [{MIN_SEASON}, {MAX_SEASON}]")
     if args.week is not None and args.week < 1:
         parser.error("--week must be >= 1")
+    if args.allow_absent is not None and (args.allow_absent < 0 or args.week is not None):
+        parser.error("--allow-absent must be >= 0 and applies to a full-season backfill, not --week")
     if args.max_rows_written < 1:
         parser.error("--max-rows-written must be positive")
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     return run(
         args.season, args.week, apply=args.apply, max_rows_written=args.max_rows_written,
-        store=store or get_store(), client=client or CbbdClient(),
+        store=store or get_store(), client=client or CbbdClient(), allow_absent=args.allow_absent,
     )
 
 

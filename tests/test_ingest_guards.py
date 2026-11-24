@@ -256,15 +256,125 @@ def test_a_re_identified_game_neutralizes_the_old_id_and_adds_the_new_one(store)
     assert pair == [9_000_999]  # the game counts once, under its new id
 
 
-def test_an_implausibly_small_fetch_neutralizes_nothing_and_fails(store):
+def synthetic_stored(n: int) -> dict[int, dict]:
+    """SYNTHETIC stored played games of one season, enough of them to test the percentage gate."""
+    return {i: {"id": i, "start_date": "2025-12-01T00:00:00.000Z", "status": "final", "is_rated": 1,
+                "winner_team_id": 1, "home_score": 70, "away_score": 60, "margin": 10, "alpha": 1.0}
+            for i in range(1, n + 1)}
+
+
+def absent_count(stored_n: int, missing: int, limit=None):
+    stored_games = synthetic_stored(stored_n)
+    raw = [{"id": i} for i in stored_games if i > missing]  # the first `missing` ids are not fetched
+    summary = run.IngestSummary(season=2026)
+    result = run._absent_games(summary, stored_games, raw, 2026, limit)
+    return summary, result
+
+
+@pytest.mark.parametrize("stored_n, missing, allowed", [
+    (6300, 0, 31), (6300, 1, 31), (6300, 31, 31),      # 0.5% of 6,300 is 31.5: 31 is within it, 32 is not
+    (400, 5, 5), (400, 6, 5),                           # small seasons: the floor of 5
+])
+def test_absent_threshold_boundary(stored_n, missing, allowed):
+    summary, result = absent_count(stored_n, missing)
+    if missing <= allowed:
+        assert result is not None and len(result) == missing and summary.failures == []
+        assert summary.anomalies.get("absent_from_source", 0) == missing
+    else:
+        assert result is None and len(summary.failures) == 1
+
+
+@pytest.mark.parametrize("percent, ok", [(0, True), (1, False), (5, False), (9, False), (11, False)])
+def test_percent_missing_from_a_full_size_season(percent, ok):
+    stored_n = 6300
+    missing = stored_n * percent // 100
+    summary, result = absent_count(stored_n, missing)
+    assert (result is not None) is ok and (summary.failures == []) is ok
+    if not ok:
+        message = summary.failures[0]
+        assert f"{missing} of the {stored_n} games" in message and "nothing was neutralized" in message
+        assert "first ids [1, 2, 3" in message and "--allow-absent" in message
+        assert summary.anomalies == {}  # nothing neutralized, nothing counted as an anomaly
+
+
+def test_one_missing_game_in_a_real_size_season_is_still_neutralized():
+    summary, result = absent_count(6300, 1)
+    assert summary.failures == [] and [r["id"] for r in result] == [1] and result[0]["is_rated"] == 0
+
+
+def test_the_allowance_can_be_set_by_argument_and_env(monkeypatch):
+    summary, result = absent_count(6300, 630, limit=630)  # 10% accepted explicitly
+    assert summary.failures == [] and len(result) == 630
+    summary, result = absent_count(6300, 631, limit=630)
+    assert result is None
+    monkeypatch.setenv("INGEST_MAX_ABSENT", "12")
+    assert absent_count(6300, 12)[1] is not None and absent_count(6300, 13)[1] is None
+    assert absent_count(6300, 13, limit=13)[1] is not None  # the argument wins
+    monkeypatch.setenv("INGEST_MAX_ABSENT", "many")
+    with pytest.raises(ValueError, match="INGEST_MAX_ABSENT"):
+        run.max_absent(100)
+
+
+def test_already_neutralized_games_are_not_counted_as_absent_again():
+    stored_games = synthetic_stored(100)
+    for g in stored_games.values():
+        g.update(is_rated=0, status="cancelled", winner_team_id=None)
+    summary = run.IngestSummary(season=2026)
+    assert run._absent_games(summary, stored_games, [], 2026) == [] and summary.failures == []
+
+
+def test_a_truncated_fetch_fails_and_changes_no_game_row(store):
     ingest_season(store, 2026, season_2026_api(), now=T1)
     before = stored(store)
-    games = load("cbbd_games_2026.json")[:30]  # 75% of the 40 stored
+    seasons_before = store.query("SELECT * FROM seasons")
+    games = load("cbbd_games_2026.json")[:30]  # 10 of the 40 stored are missing: above the allowance of 5
+    games[0] = {**games[0], "homePoints": 99, "awayPoints": 1}  # a fetched game that changed: NOT written either
     summary = ingest_season(store, 2026, api_26(games), now=T2)
-    assert not summary.ok and "under 90%" in summary.failures[0] and "NOT neutralized" in summary.failures[0]
-    assert summary.anomalies == {} and stored(store) == before
+    assert not summary.ok and "above the allowed 5" in summary.failures[0] and "nothing was neutralized" in summary.failures[0]
+    assert "first ids [" in summary.failures[0] and "10 of the 40" in summary.failures[0]
+    assert summary.anomalies == {} and stored(store) == before and "games" not in summary.rows_written
+    assert store.query("SELECT * FROM seasons") == seasons_before  # last_ingested_at not moved
     assert get_season_row(store, 2026).last_ingested_at == "2026-04-07T10:00:00Z"
-    assert ingest_season(store, 2026, api_26(load("cbbd_games_2026.json")[:36]), now=T2).ok  # exactly 90%
+
+
+def test_exactly_the_allowance_is_still_neutralized_and_ok(store):
+    ingest_season(store, 2026, season_2026_api(), now=T1)
+    games = load("cbbd_games_2026.json")[:35]  # 5 of 40 missing: the floor of 5
+    summary = ingest_season(store, 2026, api_26(games), now=T2)
+    assert summary.ok and summary.anomalies == {"absent_from_source": 5}
+    neutral = [r for r in stored(store).values() if r["status"] == "cancelled" and not r["is_rated"]]
+    assert len(neutral) >= 5 and len(stored(store)) == 40  # rows kept
+
+
+def test_allow_absent_accepts_a_large_legitimate_removal(store):
+    ingest_season(store, 2026, season_2026_api(), now=T1)
+    games = load("cbbd_games_2026.json")[:30]
+    refused = ingest_season(store, 2026, api_26(games), now=T2)
+    assert not refused.ok
+    accepted = ingest_season(store, 2026, api_26(games), now=T2, max_absent_games=10)
+    assert accepted.ok and accepted.anomalies == {"absent_from_source": 10}
+    assert get_season_row(store, 2026).last_ingested_at == "2026-04-14T10:00:00Z"
+    assert len(stored(store)) == 40 and sum(1 for r in stored(store).values() if r["status"] == "cancelled") >= 10
+
+
+def test_the_full_real_replays_neutralize_nothing(store):
+    for season, api in ((2026, season_2026_api()), (2027, season_2027_api())):
+        summary = ingest_season(store, season, api, now=T1)
+        again = ingest_season(store, season, api, now=T2)
+        assert summary.ok and again.ok and "absent_from_source" not in again.anomalies
+
+
+def test_cli_allow_absent_flag_reaches_the_ingest(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CBB_STORE", "local")
+    monkeypatch.setenv("CBB_LOCAL_DB", str(tmp_path / "t.db"))
+    monkeypatch.setattr(run, "CbbdClient", lambda: season_2026_api())
+    assert run.main(["season", "2026"]) == 0
+    monkeypatch.setattr(run, "CbbdClient", lambda: api_26(load("cbbd_games_2026.json")[:30]))
+    assert run.main(["season", "2026"]) == 1
+    assert "INGEST_FAILURE: 10 of the 40 games" in capsys.readouterr().out
+    assert run.main(["season", "2026", "--allow-absent", "10"]) == 0
+    with pytest.raises(SystemExit):
+        run.main(["season", "2026", "--allow-absent", "-1"])
 
 
 def test_stored_games_outside_the_fetch_window_are_not_absent(store):
@@ -469,3 +579,17 @@ def test_cli_turns_an_exception_into_the_marker(cli, monkeypatch, capsys):
     monkeypatch.setattr(run, "CbbdClient", Boom)
     assert run.main(["season", "2026"]) == 1
     assert "INGEST_FAILURE: ConnectionError: down" in capsys.readouterr().out
+
+
+# ---- quota header ----
+
+class HeaderlessApi(FakeApi):
+    quota_header_missing = True
+
+
+def test_a_quota_that_could_not_be_read_is_a_warning_once_per_run(store):
+    api = HeaderlessApi({2026: load("cbbd_teams_2026.json")}, {2026: load("cbbd_games_2026.json")})
+    summary = ingest_season(store, 2026, api, now=T1)
+    assert summary.ok
+    assert len([w for w in summary.warnings if "no readable X-CallLimit-Remaining" in w]) == 1
+    assert not any("quota" in w for w in ingest_season(store, 2026, season_2026_api(), now=T2).warnings)

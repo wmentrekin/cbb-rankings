@@ -205,3 +205,25 @@ def test_apply_reports_the_ok_flag_and_applies_a_site_override(store, capsys, ov
     r = report(out)
     assert code == 0 and r["ok"] is True and r["failures"] == [] and r["overrides"]["applied"] == [213466]
     assert store.query("SELECT home_team_id FROM games WHERE id = 213466")[0]["home_team_id"] == 344
+
+
+def test_a_truncated_fetch_fails_the_dry_run_and_the_apply_and_allow_absent_accepts_it(store, capsys, overrides_file):
+    run.ingest_season(store, 2026, season_2026_api(), now=lambda: datetime(2026, 4, 7, tzinfo=timezone.utc))
+    before = store.query("SELECT * FROM games ORDER BY id")
+    short = FakeApi({2026: load("cbbd_teams_2026.json")}, {2026: load("cbbd_games_2026.json")[:30]})
+    for extra in ([], ["--apply"]):
+        code, out = run_cli(capsys, store, short, "--season", "2026", *extra)
+        assert code == 1 and "BACKFILL_FAILED" in out and "INGEST_FAILURE: 10 of the 40 games" in out
+        assert store.query("SELECT * FROM games ORDER BY id") == before
+    code, out = run_cli(capsys, store, short, "--season", "2026", "--allow-absent", "10")
+    assert code == 0 and report(out)["anomalies"] == {"absent_from_source": 10}
+    code, out = run_cli(capsys, store, short, "--season", "2026", "--allow-absent", "10", "--apply")
+    assert code == 0 and "BACKFILL_APPLIED" in out and report(out)["ok"] is True
+    assert sum(1 for r in store.query("SELECT status FROM games") if r["status"] == "cancelled") >= 10
+
+
+@pytest.mark.parametrize("argv", [["--allow-absent", "-1"], ["--week", "3", "--allow-absent", "5"]])
+def test_allow_absent_usage_errors(store, argv):
+    with pytest.raises(SystemExit) as e:
+        bf.main(["--season", "2026", *argv], store=store, client=season_2026_api())
+    assert e.value.code == 2

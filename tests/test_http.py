@@ -168,3 +168,19 @@ def test_floor_from_env_argument_and_default(monkeypatch):
 def test_missing_quota_header_never_trips_the_floor():
     client = CbbdClient("k", session=FakeSession([FakeResponse(200, [1]), FakeResponse(200, [2])]), sleep=lambda s: None)
     assert client.get("/a") == [1] and client.get("/b") == [2] and client.quota_remaining is None
+
+
+def test_missing_or_unreadable_quota_header_is_flagged_once_without_failing(caplog):
+    session = FakeSession([FakeResponse(200, [1]), FakeResponse(200, [2], {"X-CallLimit-Remaining": "n/a"})])
+    client = CbbdClient("k", session=session, sleep=lambda s: None)
+    assert not client.quota_header_missing
+    with caplog.at_level("WARNING", logger="ingest.http"):
+        assert client.get("/a") == [1] and client.get("/b") == [2]
+    assert client.quota_header_missing and client.quota_remaining is None
+    assert len([r for r in caplog.records if "quota floor cannot be enforced" in r.message]) == 1
+
+
+def test_a_readable_header_is_not_flagged():
+    client = CbbdClient("k", session=FakeSession([remaining(900, [1])]), sleep=lambda s: None)
+    client.get("/a")
+    assert not client.quota_header_missing

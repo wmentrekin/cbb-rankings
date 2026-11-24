@@ -15,14 +15,18 @@ everything succeeded and the gates below passed; a run that did not is reported 
 
 Gates (failures): no teams or no games fetched for a season, or none for a week that should
 have games; dropped or unusable rows above a threshold (default: the larger of 5 and 0.5% of
-the rows fetched; env `INGEST_MAX_DROPPED` or the `max_dropped` argument overrides it); a
-full fetch that is implausibly small for what is stored (absent games are then NOT
-neutralized); a week ingest on a season never fully ingested, or after Selection Sunday was
-changed in `seasons.json`.
+the rows fetched; env `INGEST_MAX_DROPPED` or the `max_dropped` argument overrides it); more
+stored games absent from a full season fetch than a small allowance (default: the larger of 5
+and 0.5% of the stored games of the season; env `INGEST_MAX_ABSENT` or the `max_absent`
+argument / `--allow-absent N` overrides it): a truncated fetch looks exactly like that, so
+NOTHING is neutralized and no game row is written (teams and the seasons row still are, the
+season is not stamped); a week ingest on a season never fully ingested, or after Selection
+Sunday was changed in `seasons.json`.
 
 Guards on the stored games of the season (each counted as an anomaly kind and logged):
 * a stored game absent from a complete season fetch is neutralized (`is_rated = 0`, status
-  `cancelled`, result cleared, row kept): `absent_from_source`.
+  `cancelled`, result cleared, row kept): `absent_from_source`, when no more than the allowance
+  above are absent.
 * two rows with the same unordered team pair and game_date that would both be rated and played
   are a double count: the larger id stays rated, the others get `is_rated = 0`:
   `duplicate_rated_pair`.
@@ -58,7 +62,7 @@ from ingest.derive import (
     eastern_date,
 )
 from ingest.games import LOOKBACK_DAYS, fetch_season_games, fetch_week_games, season_window
-from ingest.http import CbbdClient, quota_floor_from_env
+from ingest.http import QUOTA_HEADER, CbbdClient, quota_floor_from_env
 from ingest.overrides import OVERRIDE_FAILURE_MARKER, OverrideFileError, OverrideSummary, apply_overrides, load_overrides
 from ingest.rules import RATED_PLAYED_SQL, is_rated_played
 from ingest.teams import fetch_teams, stored_team_ids, team_rows
@@ -80,11 +84,17 @@ INGEST_FAILURE_MARKER = "INGEST_FAILURE"
 MAX_DROPPED_ENV = "INGEST_MAX_DROPPED"
 MIN_DROP_ALLOWANCE = 5
 DROP_FRACTION = 0.005
-# A complete season fetch holds every stored game of its window, scheduled ones included, so
-# one with fewer rows than this share of them is a bad fetch, not a purge.
-MIN_PLAUSIBLE_FRACTION = 0.9
+# A complete season fetch holds every stored game of its window, scheduled ones included, so a
+# fetch that lacks more than this many of them is truncated, not a purge of that many games.
+MAX_ABSENT_ENV = "INGEST_MAX_ABSENT"
+MIN_ABSENT_ALLOWANCE = 5
+ABSENT_FRACTION = 0.005
 DROPPED_KINDS = (MALFORMED_ROW, UNKNOWN_STATUS, UNKNOWN_SEASON_TYPE)
 MAX_IDS_PER_KIND = 20
+ALLOW_ABSENT_HELP = (
+    "operator override: tolerate up to N stored games absent from the season fetch (neutralizing them) "
+    f"instead of the default allowance (max(5, 0.5%% of the stored games); env {MAX_ABSENT_ENV})"
+)
 
 
 class SeasonNotIngestedError(RuntimeError):
@@ -165,6 +175,20 @@ def max_dropped(games_fetched: int, override: int | None = None) -> int:
     return max(MIN_DROP_ALLOWANCE, math.ceil(DROP_FRACTION * games_fetched))
 
 
+def max_absent(stored_games: int, override: int | None = None) -> int:
+    """How many stored games may be absent from a full season fetch before the run fails (and
+    neutralizes nothing): the larger of 5 and 0.5% of the stored games of the season. The
+    operator override (`--allow-absent N`, env `INGEST_MAX_ABSENT`, or the argument) replaces it."""
+    if override is not None:
+        return override
+    raw = os.environ.get(MAX_ABSENT_ENV, "").strip()
+    if raw:
+        if not raw.isdigit():
+            raise ValueError(f"{MAX_ABSENT_ENV} must be a non-negative integer, got {raw!r}")
+        return int(raw)
+    return max(MIN_ABSENT_ALLOWANCE, math.floor(ABSENT_FRACTION * stored_games))
+
+
 def _check_dropped(summary: IngestSummary, limit: int | None) -> None:
     dropped = summary.dropped_both_non_d1 + sum(summary.anomalies.get(k, 0) for k in DROPPED_KINDS)
     allowed = max_dropped(summary.games_fetched, limit)
@@ -222,18 +246,25 @@ def _in_window(row: dict, season: int) -> bool:
     return start <= datetime.fromisoformat(row["start_date"]) <= end
 
 
-def _absent_games(summary: IngestSummary, stored: dict[int, dict], raw_games: list[dict], season: int) -> list[dict]:
-    """Neutralized copies of stored games a complete season fetch no longer lists. Returns []
-    (and records a failure) when the fetch is implausibly small, and never acts on an empty one."""
+def _absent_games(
+    summary: IngestSummary, stored: dict[int, dict], raw_games: list[dict], season: int, limit: int | None = None,
+) -> list[dict] | None:
+    """Neutralized copies of the stored games a complete season fetch no longer lists, or None
+    when there are more of them than `max_absent` allows: that is a truncated fetch, so a failure
+    is recorded and NOTHING is neutralized. The caller then writes no game rows at all."""
     fetched = {g["id"] for g in raw_games if g.get("id") is not None}
     in_window = {i: r for i, r in stored.items() if _in_window(r, season)}
-    if in_window and len(fetched) < MIN_PLAUSIBLE_FRACTION * len(in_window):
-        summary.failures.append(
-            f"the season fetch returned {len(fetched)} games but {len(in_window)} are stored for it "
-            f"(under {MIN_PLAUSIBLE_FRACTION:.0%}); absent games were NOT neutralized"
-        )
-        return []
     absent = [r for i, r in sorted(in_window.items()) if i not in fetched and not _is_neutralized(r)]
+    allowed = max_absent(len(in_window), limit)
+    if len(absent) > allowed:
+        first = [r["id"] for r in absent[:MAX_IDS_PER_KIND]]
+        summary.failures.append(
+            f"{len(absent)} of the {len(in_window)} games stored for season {season} are absent from the season "
+            f"fetch ({len(fetched)} games fetched), above the allowed {allowed}: the fetch looks truncated, so nothing "
+            f"was neutralized and no game row was written; first ids {first}. If the source really removed them, "
+            f"rerun with --allow-absent {len(absent)} (python -m ingest.run season / scripts/backfill_games.py)"
+        )
+        return None
     if absent:
         ids = [r["id"] for r in absent]
         _anomaly(summary, ABSENT_FROM_SOURCE, ids)
@@ -255,11 +286,17 @@ def _duplicate_losers(games: dict[int, dict]) -> list[int]:
 def _store_games(
     store: Store, summary: IngestSummary, raw_games: list[dict], season_row: SeasonRow,
     d1_ids: set[int], alpha_cfg: AlphaConfig, *, full_season: bool, limit: int | None,
+    absent_limit: int | None = None,
 ) -> None:
     season = season_row.season
     rows = _derive_rows(summary, raw_games, season_row, d1_ids, alpha_cfg)
     stored = _stored_games(store, season, rated_played_only=not full_season)
-    neutralized = _absent_games(summary, stored, raw_games, season) if full_season else []
+    neutralized = _absent_games(summary, stored, raw_games, season, absent_limit) if full_season else []
+    if neutralized is None:
+        # A truncated fetch: the store is left exactly as it was (no fresh rows either, so it
+        # stays one consistent snapshot and a rerun starts from the same state).
+        _check_dropped(summary, limit)
+        return
 
     # The state after this run's writes, so the duplicate check sees what will be stored.
     after = {**stored, **{r["id"]: r for r in neutralized}, **{r["id"]: r for r in rows}}
@@ -286,6 +323,11 @@ def _close(summary: IngestSummary, client: Any) -> None:
         summary.warnings.append(
             f"API quota remaining {summary.quota_remaining} is below the floor {floor}: the next run will abort"
         )
+    if getattr(client, "quota_header_missing", False):
+        summary.warnings.append(
+            f"the API response had no readable {QUOTA_HEADER} header, so the quota could not be read and the "
+            f"floor ({floor}) was not enforced (quota is shared with the football pipeline)"
+        )
     if summary.retried_writes:
         summary.warnings.append(
             f"{summary.retried_writes} write(s) were retried after a timeout; rows_written may be under-counted"
@@ -305,14 +347,15 @@ def _stamp(store: Store, summary: IngestSummary, row: SeasonRow, now: datetime) 
 def ingest_season(
     store: Store, season: int, client: CbbdClient | None = None,
     *, alpha_cfg: AlphaConfig = DEFAULT_ALPHA, now: Callable[[], datetime] = _now,
-    max_dropped_rows: int | None = None,
+    max_dropped_rows: int | None = None, max_absent_games: int | None = None,
 ) -> IngestSummary:
     """Teams, then every game of the season: the scheduled path. Creates the season row (anchor
     from the data) on first run; an existing row keeps its anchor.
 
     Order: every API call first, then teams, the season row, games (with the absent and
     duplicate guards), and last the `last_ingested_at` stamp, only if `summary.ok`. Nothing is
-    written when no teams or no games came back."""
+    written when no teams or no games came back, and no game row when too many stored games are
+    absent from the fetch (`max_absent_games`, see `max_absent`)."""
     client = client or CbbdClient()
     summary = IngestSummary(season=season)
     selection_sunday = _selection_sunday(season, summary)
@@ -356,7 +399,8 @@ def ingest_season(
         )
     _upsert(store, summary, "teams", teams, ("id", "season"))
     _upsert(store, summary, "seasons", [season_row_dict(row)], ("season",))  # persist the anchor before games use it
-    _store_games(store, summary, raw_games, row, {t["id"] for t in teams}, alpha_cfg, full_season=True, limit=max_dropped_rows)
+    _store_games(store, summary, raw_games, row, {t["id"] for t in teams}, alpha_cfg, full_season=True,
+                  limit=max_dropped_rows, absent_limit=max_absent_games)
     _stamp(store, summary, row, now())
     _close(summary, client)
     return summary
@@ -432,11 +476,15 @@ def ingest_week(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m ingest.run", description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="mode", required=True)
-    sub.add_parser("season", help="teams and all games (the scheduled path)").add_argument("season", type=int)
+    full = sub.add_parser("season", help="teams and all games (the scheduled path)")
+    full.add_argument("season", type=int)
+    full.add_argument("--allow-absent", type=int, metavar="N", help=ALLOW_ABSENT_HELP)
     week = sub.add_parser("week", help="windowed games for one week (manual)")
     week.add_argument("season", type=int)
     week.add_argument("week", type=int)
     args = parser.parse_args(argv)
+    if args.mode == "season" and args.allow_absent is not None and args.allow_absent < 0:
+        parser.error("--allow-absent must be >= 0")
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     try:
@@ -445,14 +493,23 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{OVERRIDE_FAILURE_MARKER}: {exc}")
         return 1
     store = get_store()
+    summary: IngestSummary | None = None
+    failure: str | None = None
     try:
-        summary = ingest_season(store, args.season) if args.mode == "season" else ingest_week(store, args.season, args.week)
+        summary = (
+            ingest_season(store, args.season, max_absent_games=args.allow_absent) if args.mode == "season"
+            else ingest_week(store, args.season, args.week)
+        )
     except Exception as exc:
         log.exception("ingest failed")
-        print(failure_line([f"{type(exc).__name__}: {exc}"]))
-        return 1
-    # The ingest rewrote every overridden game from the source: restore the corrections now.
+        failure = failure_line([f"{type(exc).__name__}: {exc}"])
+    # The ingest rewrote every overridden game it fetched from the source, a failed one included
+    # (its rows are written but unstamped): restore the corrections whatever the outcome.
     overrides: OverrideSummary = apply_overrides(store, args.season)
+    if summary is None:
+        print(failure)
+        print(json.dumps({"overrides": overrides.as_dict()}, indent=2, sort_keys=True))
+        return 1
     print(json.dumps({**summary.as_dict(), "overrides": overrides.as_dict()}, indent=2, sort_keys=True))
     if not summary.ok:
         print(failure_line(summary.failures))

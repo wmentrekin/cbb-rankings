@@ -13,7 +13,9 @@ carries a Retry-After header: a spent monthly quota should fail fast, not burn m
 
 Quota floor: `X-CallLimit-Remaining` is read after every response. Once it is below the floor
 (env `CBBD_QUOTA_FLOOR`, default 50) no further request is sent and `QuotaFloorError` is raised,
-because the quota is shared with a live football pipeline.
+because the quota is shared with a live football pipeline. A response without a readable header
+sets `quota_header_missing` (logged once); the floor cannot protect the quota while it is
+unknown, so the ingest summary carries a warning, but the run does not fail.
 """
 from __future__ import annotations
 
@@ -75,6 +77,7 @@ class CbbdClient:
         self.quota_floor = quota_floor_from_env() if quota_floor is None else quota_floor
         self.calls = 0
         self.quota_remaining: int | None = None  # last X-CallLimit-Remaining seen
+        self.quota_header_missing = False  # some response had no readable X-CallLimit-Remaining
 
     def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         """GET `path` and return the decoded JSON body."""
@@ -120,6 +123,9 @@ class CbbdClient:
         value = response.headers.get(QUOTA_HEADER)
         if value is not None and value.strip().isdigit():
             self.quota_remaining = int(value)
+        elif not self.quota_header_missing:
+            self.quota_header_missing = True
+            log.warning("%s is missing or unreadable (%r): the quota floor cannot be enforced", QUOTA_HEADER, value)
 
 
 def _backoff(attempt: int) -> float:
