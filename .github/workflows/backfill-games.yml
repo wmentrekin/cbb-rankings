@@ -24,6 +24,10 @@ on:
         description: 'Refuse to apply above this estimated rows-written count (blank = 40000; D1 free plan: 100000 per day)'
         required: false
         type: string
+      allow_absent:
+        description: 'Accept up to N stored games missing from a full-season fetch (neutralizes them); blank = default allowance. Only for a verified, legitimate removal'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -39,6 +43,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Reminder - shared concurrency group
+        run: |
+          echo "::notice title=Shared concurrency group::Do not dispatch this workflow while the Monday 'Weekly Rankings' run is queued or about to start (Mondays 10:00 UTC). All D1-writing workflows share the group weekly-rankings: one run executes and only ONE waits, and a newer waiting run replaces an older waiting one, so this dispatch can silently cancel a queued Monday run. Check the Actions tab first."
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
@@ -57,11 +64,13 @@ jobs:
           WEEK: ${{ inputs.week }}
           APPLY: ${{ inputs.apply }}
           MAX_ROWS_WRITTEN: ${{ inputs.max_rows_written }}
+          ALLOW_ABSENT: ${{ inputs.allow_absent }}
         run: |
           set -o pipefail
           args=(--season "$SEASON")
           [ -n "$WEEK" ] && args+=(--week "$WEEK")
           [ -n "$MAX_ROWS_WRITTEN" ] && args+=(--max-rows-written "$MAX_ROWS_WRITTEN")
+          [ -n "$ALLOW_ABSENT" ] && args+=(--allow-absent "$ALLOW_ABSENT")
           [ "$APPLY" = "true" ] && args+=(--apply)
           # Failures are not masked: the script's exit code (non-zero on a fetch failure, an INGEST_FAILURE, an OVERRIDE_FAILURE
           # or a refused apply) fails the job. tee keeps the summary in the job log either way.

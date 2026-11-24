@@ -18,7 +18,7 @@ def test_workflow_yaml_parses_and_declares_inputs():
     yaml = pytest.importorskip("yaml")  # not a project dependency; parsed where available
     doc = yaml.safe_load(WORKFLOW.read_text())
     inputs = doc[True]["workflow_dispatch"]["inputs"]  # PyYAML reads the key `on` as True
-    assert set(inputs) == {"season", "week", "apply", "max_rows_written"}
+    assert set(inputs) == {"season", "week", "apply", "max_rows_written", "allow_absent"}
     assert inputs["season"]["required"] is True and inputs["apply"]["default"] is False
     assert doc["concurrency"] == {"group": "weekly-rankings", "cancel-in-progress": False}
 

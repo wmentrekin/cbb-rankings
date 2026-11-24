@@ -7,8 +7,19 @@ name: Weekly Rankings
 # The cron fires all year. Out-of-season Mondays are no-ops: main.py prints `WEEKLY_NOOP: ...`,
 # exits 0, spends no API call, and the deploy hook is NOT called.
 #
+# Shared concurrency group (see below): the scheduled run must never overlap a manual D1 writer, but
+# GitHub keeps only ONE pending run per group and a newer pending run cancels an older pending one.
+# So a Monday run queued behind a long manual backfill is replaced if someone dispatches another
+# workflow of this group meanwhile; the manual workflows print a reminder at start. There is no
+# simple, correct alternative (separate groups would allow two writers; a second cron would only
+# repeat the ingest and the site rebuild), so this is a documented limitation: do not dispatch
+# while the Monday run is queued, and if a Monday run shows as cancelled, rerun it. A skipped week
+# also heals itself: the next run rates and publishes every earlier week without ratings (catch-up).
+#
 # Errors are never masked: main.py's exit code fails the job (INGEST_FAILURE, OVERRIDE_FAILURE, PRIOR_FAILURE,
-# MODEL_FAILURE, WRITE_FAILURE, PUBLISH_FAILURE, WEEKLY_FAILURE). A failed run never rebuilds the site.
+# CATCHUP_FAILURE, MODEL_FAILURE, WRITE_FAILURE, PUBLISH_FAILURE, WEEKLY_FAILURE). A failed run never rebuilds the
+# site. WEEKLY_WARNING (a season missing from ingest/seasons.json in September or October) does not fail the
+# run; it is repeated as a job annotation and in the summary.
 
 on:
   schedule:
@@ -29,6 +40,7 @@ permissions:
 
 concurrency:
   # Shared with the other D1-writing workflows; an in-flight run finishes rather than being cancelled halfway.
+  # Only one run can wait in the group (a newer waiting run replaces an older one): see the header comment.
   group: weekly-rankings
   cancel-in-progress: false
 
@@ -100,7 +112,10 @@ jobs:
           {
             echo '### Weekly rankings'
             echo '```'
-            grep -hE '^(WEEKLY_OK|WEEKLY_NOOP|WEEKLY_FAILURE|INGEST_FAILURE|OVERRIDE_FAILURE|PRIOR_FAILURE|MODEL_FAILURE|WRITE_FAILURE|PUBLISH_FAILURE)' output.log 2>/dev/null || echo 'no marker line (see the job log)'
+            grep -hE '^(WEEKLY_OK|WEEKLY_NOOP|WEEKLY_WARNING|WEEKLY_FAILURE|INGEST_FAILURE|OVERRIDE_FAILURE|CATCHUP_FAILURE|PRIOR_FAILURE|MODEL_FAILURE|WRITE_FAILURE|PUBLISH_FAILURE)' output.log 2>/dev/null || echo 'no marker line (see the job log)'
             echo "published=${PUBLISHED:-unknown} deploy_hook=${HOOK_OUTCOME:-skipped}"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          if grep -q '^WEEKLY_WARNING' output.log 2>/dev/null; then
+            grep -h '^WEEKLY_WARNING' output.log | sed 's/^/::warning::/'
+          fi

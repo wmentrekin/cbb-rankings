@@ -52,6 +52,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Reminder - shared concurrency group
+        run: |
+          echo "::notice title=Shared concurrency group::Do not dispatch this workflow while the Monday 'Weekly Rankings' run is queued or about to start (Mondays 10:00 UTC). All D1-writing workflows share the group weekly-rankings: one run executes and only ONE waits, and a newer waiting run replaces an older waiting one, so this dispatch can silently cancel a queued Monday run. Check the Actions tab first."
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:

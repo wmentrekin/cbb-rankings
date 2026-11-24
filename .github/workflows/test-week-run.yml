@@ -39,6 +39,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Reminder - shared concurrency group
+        run: |
+          echo "::notice title=Shared concurrency group::Do not dispatch this workflow while the Monday 'Weekly Rankings' run is queued or about to start (Mondays 10:00 UTC). All D1-writing workflows share the group weekly-rankings: one run executes and only ONE waits, and a newer waiting run replaces an older waiting one, so this dispatch can silently cancel a queued Monday run. Check the Actions tab first."
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
@@ -72,6 +75,6 @@ jobs:
           {
             echo '### Test week run (staging)'
             echo '```'
-            grep -hE '^(WEEKLY_OK|WEEKLY_NOOP|WEEKLY_FAILURE|INGEST_FAILURE|OVERRIDE_FAILURE|PRIOR_FAILURE|MODEL_FAILURE|WRITE_FAILURE|PUBLISH_FAILURE)' output.log 2>/dev/null || echo 'no marker line (see the job log)'
+            grep -hE '^(WEEKLY_OK|WEEKLY_NOOP|WEEKLY_FAILURE|INGEST_FAILURE|OVERRIDE_FAILURE|CATCHUP_FAILURE|PRIOR_FAILURE|MODEL_FAILURE|WRITE_FAILURE|PUBLISH_FAILURE)' output.log 2>/dev/null || echo 'no marker line (see the job log)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

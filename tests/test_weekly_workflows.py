@@ -109,3 +109,23 @@ def test_backfill_ratings_is_a_dry_run_in_staging_by_default():
     assert "--no-ingest" in run and "--dry-run" in run and 'APPLY" != "true"' in run
     assert "CBBD_API_KEY" not in text  # ratings-only: no API calls
     assert "--all-weeks" in run and "--weeks" in run
+
+
+@pytest.mark.parametrize("name", ["backfill-ratings.yml", "backfill-games.yml", "test-week-run.yml"])
+def test_manual_workflows_remind_the_operator_about_the_shared_concurrency_group_first(name):
+    _, doc = load(name)
+    first = steps(doc)[0]
+    assert "uses" not in first and first["name"].startswith("Reminder")
+    assert "::notice" in first["run"] and "weekly-rankings" in first["run"] and "Monday" in first["run"]
+    assert "replaces an older waiting one" in first["run"]
+
+
+def test_weekly_workflow_documents_the_one_pending_run_limitation_and_surfaces_warnings():
+    text, doc = load("weekly-update.yml")
+    assert "ONE pending run per group" in text and "cancels an older pending one" in text
+    assert "Only one run can wait in the group" in text
+    run = steps(doc)[-1]["run"]
+    for marker in ("CATCHUP_FAILURE", "WEEKLY_WARNING"):
+        assert marker in run
+    assert "::warning::" in run
+    assert text.count("cancel-in-progress: false") == 1 and doc["concurrency"]["group"] == "weekly-rankings"
