@@ -6,17 +6,28 @@
     uv run python main.py --season 2026 --all-weeks --no-ingest --dry-run   # ratings backfill plan
 
 Default target: season = `season_for_date(today_et())`, week = `resolve_week(season_row, today)`
-(the week that ended yesterday). `--season` / `--week` override either. A Monday with nothing to
-publish (outside the season, before week 1 has ended, after the week containing Selection Sunday
-was published, a season missing from ingest/seasons.json) prints `WEEKLY_NOOP: <code>: <why>`,
-exits 0 and spends no API call. The one exception: a brand-new season has no `seasons` row until
-its first ingest, so a Monday inside the season window (Nov 1 through the Sunday after Selection
-Sunday) with no row ingests first (4 API calls) and then resolves the week.
+(the week that ended yesterday), plus CATCH-UP: every earlier week of the season that has no rows
+in the ratings table is rated, written and published first, in ascending order, so a failed or
+skipped Monday heals on the next run and deltas are computed against the right previous week.
+More than `--max-catch-up` (default 4) missing weeks is a CATCHUP_FAILURE: that is a backfill
+(the "Backfill Ratings" workflow), not a Monday run. `--season` / `--week` override the target;
+an explicit `--week` / `--weeks` / `--all-weeks` never catches up.
 
-Steps of one run, each stopping the run with its marker and a non-zero exit (nothing later runs):
+A Monday with nothing to publish (April through October, before week 1 has ended, after the week
+containing Selection Sunday was published) prints `WEEKLY_NOOP: <code>: <why>`, exits 0 and spends
+no API call. A date from November 1 through March 31 whose season has no entry in
+ingest/seasons.json is NOT a no-op: it is a WEEKLY_FAILURE (add the entry), and in September and
+October the same missing entry prints a `WEEKLY_WARNING` weeks ahead. A brand-new season has no
+`seasons` row until its first ingest, so a Monday inside the season window (Nov 1 through the
+Sunday after Selection Sunday) with no row ingests first (4 API calls) and then resolves the week.
+
+Steps of one run, each stopping the run with its marker and a non-zero exit (nothing later runs).
+The override file is validated first (OVERRIDE_FAILURE), before any API call or write:
 
     ingest_season (4 API calls)           INGEST_FAILURE     summary.ok false, fetch error, quota floor
+                                                             (rows it wrote are followed by apply_overrides)
     apply_overrides                       OVERRIDE_FAILURE   a known-wrong game must not be rated
+    catch-up weeks (default mode)         CATCHUP_FAILURE    too many weeks without ratings
     prior season present (weeks 1-6)      PRIOR_FAILURE      back-fill season S-1 first, or --allow-missing-prior
     rate_week                             MODEL_FAILURE      ModelSolveError / NoTeamsError
     write ratings (or ratings_staging)    WRITE_FAILURE
@@ -53,7 +64,13 @@ from artifacts.rankings import build_payload, check_table
 from database import get_store
 from database.store import Store, WriteStats
 from ingest.http import CbbdClient
-from ingest.overrides import OVERRIDE_FAILURE_MARKER, OverrideFileError, OverrideSummary, apply_overrides
+from ingest.overrides import (
+    OVERRIDE_FAILURE_MARKER,
+    OverrideFileError,
+    OverrideSummary,
+    apply_overrides,
+    load_overrides,
+)
 from ingest.planning import PlanningStore
 from ingest.rules import RATED_PLAYED_SQL
 from ingest.run import IngestSummary, ingest_season
@@ -83,6 +100,8 @@ MODEL_FAILURE_MARKER = "MODEL_FAILURE"
 WRITE_FAILURE_MARKER = "WRITE_FAILURE"
 PUBLISH_FAILURE_MARKER = "PUBLISH_FAILURE"
 INGEST_FAILURE_MARKER = "INGEST_FAILURE"
+CATCHUP_FAILURE_MARKER = "CATCHUP_FAILURE"
+WARNING_MARKER = "WEEKLY_WARNING"
 
 RATING_DECIMALS = 6  # stored precision: solver noise below this must not rewrite D1 rows
 FLOOR_TOLERANCE = 1e-6
@@ -93,6 +112,7 @@ DELETE_STALE_SQL = (
     "AND team_id NOT IN (SELECT value FROM json_each(?1, '$.keep'))"
 )
 WINDOW_START = (11, 1)  # a season's Mondays begin on Nov 1 of the year before it ends
+DEFAULT_MAX_CATCH_UP = 4  # weeks before the resolved one that a Monday run may rate and publish
 
 
 class RunFailure(Exception):
@@ -122,6 +142,7 @@ class Options:
     publish_staging: bool = False
     dry_run: bool = False
     allow_missing_prior: bool = False
+    max_catch_up: int = DEFAULT_MAX_CATCH_UP
 
     @property
     def range_mode(self) -> bool:
@@ -145,6 +166,37 @@ def season_window(selection_sunday: date, season: int) -> tuple[date, date]:
     before it ends through the Sunday after Selection Sunday (the Monday after Selection Sunday
     publishes the last week)."""
     return date(season - 1, *WINDOW_START), selection_sunday + timedelta(days=7)
+
+
+def in_season_months(d: date) -> bool:
+    """November through March: the months a season's Monday runs happen in."""
+    return d.month >= WINDOW_START[0] or d.month <= 3
+
+
+def _configured_selection_sunday(season: int, today: date, scheduled: bool, out: Callable[[str], None]) -> date:
+    """Selection Sunday from ingest/seasons.json. A missing entry stops an explicit request; for the
+    scheduled run it is a failure whenever today is inside the season's months (so forgetting to add
+    the next season is red, not months of green no-ops), a no-op outside them, with a warning in
+    September and October, weeks before the first Monday run."""
+    try:
+        return load_selection_sunday(season)
+    except SeasonConfigError as exc:
+        if not scheduled:
+            raise RunFailure(FAILURE_MARKER, str(exc), 2) from exc
+        hint = (
+            f'add "{season}": {{"selection_sunday": "YYYY-MM-DD", "provisional": true}} to ingest/seasons.json '
+            f"(Selection Sunday is not available from the API)"
+        )
+        if in_season_months(today):
+            raise RunFailure(
+                FAILURE_MARKER,
+                f"season {season} is not in ingest/seasons.json but {today} is inside its season (November through "
+                f"March), so nothing can be rated or published: {hint}",
+            ) from exc
+        if today.month in (9, 10):
+            out(f"{WARNING_MARKER}: season {season} starts in November and is not in ingest/seasons.json; {hint}. "
+                f"From November 1 the weekly run fails until it is added.")
+        raise RunNoop("outside_season", f"{today} is outside the season window (April through October); season {season} is not configured yet") from exc
 
 
 def weeks_ended(row: SeasonRow, today: date) -> int:
@@ -206,14 +258,33 @@ def _lines(items: list[tuple[str, Any]], out: Callable[[str], None]) -> None:
 
 
 def _ingest(store: Store, season: int, api: Any, out: Callable[[str], None]) -> tuple[IngestSummary, OverrideSummary]:
+    summary: IngestSummary | None = None
     try:
         summary = ingest_season(store, season, api() if callable(api) else api)
+        failure = None if summary.ok else "; ".join(summary.failures)
     except Exception as exc:
         log.exception("ingest failed")
-        raise RunFailure(INGEST_FAILURE_MARKER, f"{type(exc).__name__}: {exc}") from exc
-    if not summary.ok:
-        raise RunFailure(INGEST_FAILURE_MARKER, "; ".join(summary.failures))
+        failure = f"{type(exc).__name__}: {exc}"
+    if failure is not None:
+        raise RunFailure(INGEST_FAILURE_MARKER, failure + _restore_overrides(store, season, summary))
     return summary, _overrides(store, season, out)
+
+
+def _restore_overrides(store: Store, season: int, summary: IngestSummary | None) -> str:
+    """After a failed ingest: it may have written rows (a failed gate leaves the fetched rows
+    written, unstamped), which reverts every overridden game to the source's values. Re-apply the
+    overrides so stored data never sits with them reverted. The run still fails. `summary` is None
+    when the ingest raised, so what was written is unknown."""
+    if summary is not None and not summary.total_rows_written:
+        return ""
+    try:
+        restored = apply_overrides(store, season)
+    except Exception as exc:  # the run is failing already: report, do not mask the ingest failure
+        log.exception("re-applying overrides after a failed ingest failed")
+        return f" [overrides could NOT be re-applied afterwards: {type(exc).__name__}: {exc}]"
+    if not restored.ok:
+        return f" [overrides re-applied, but {len(restored.failed)} failed: {[f['game_id'] for f in restored.failed]}]"
+    return f" [overrides re-applied afterwards: {len(restored.applied)} game(s) restored]"
 
 
 def _overrides(store: Store, season: int, out: Callable[[str], None]) -> OverrideSummary:
@@ -225,9 +296,19 @@ def _overrides(store: Store, season: int, out: Callable[[str], None]) -> Overrid
         detail = "; ".join(f"game_id={f['game_id']} reason={f['reason']}" for f in summary.failed)
         raise RunFailure(
             OVERRIDE_FAILURE_MARKER,
-            f"{len(summary.failed)} override(s) failed, so a known-wrong game would be rated; stopping before the model: {detail}",
+            f"{len(summary.failed)} override(s) failed, so a known-wrong game would be rated; stopping before the model: "
+            f"{detail}. To fix: in ingest/game_result_overrides.json correct or remove the entry for each game_id above "
+            f"(a score override cannot re-score a game that became cancelled or was neutralized as absent from the "
+            f"source; that needs a human decision); every run fails until then",
         )
     return summary
+
+
+def missing_weeks(store: Store, table: str, season: int, before: int) -> list[int]:
+    """Weeks 1..before-1 of the season with no row in the ratings table."""
+    check_table(table)
+    have = {int(r["week"]) for r in store.query(f"SELECT DISTINCT week FROM {table} WHERE season = ? AND week < ?", [season, before])}
+    return [w for w in range(1, before) if w not in have]
 
 
 def _target_weeks(opts: Options, row: SeasonRow, today: date) -> list[int]:
@@ -362,14 +443,9 @@ def run(
 
 def _run(opts: Options, store: Store, api: Any, r2: Any, today: date, now: Callable[[], datetime], out: Callable[[str], None]) -> None:
     check_table(opts.table)
-    season = opts.season if opts.season is not None else season_for_date(today)
     scheduled = opts.season is None and opts.week is None and not opts.range_mode
-    try:
-        selection_sunday = load_selection_sunday(season)
-    except SeasonConfigError as exc:
-        if opts.season is not None:
-            raise RunFailure(FAILURE_MARKER, str(exc), 2) from exc
-        raise RunNoop("season_not_configured", str(exc)) from exc
+    season = opts.season if opts.season is not None else season_for_date(today)
+    selection_sunday = _configured_selection_sunday(season, today, scheduled, out)
     if scheduled:
         start, end = season_window(selection_sunday, season)
         if not start <= today <= end:
@@ -382,6 +458,10 @@ def _run(opts: Options, store: Store, api: Any, r2: Any, today: date, now: Calla
             f"season {season} has no week to publish on {today} (week 1 has not ended, or the week containing "
             f"Selection Sunday {row.selection_sunday} was already published); no API call was made",
         )
+    try:
+        load_overrides()  # a broken file fails before any API call is spent or anything is written
+    except OverrideFileError as exc:
+        raise RunFailure(OVERRIDE_FAILURE_MARKER, str(exc)) from exc
     if opts.publishes and r2 is None:
         try:
             r2 = r2_from_env()  # fail before any API call or write when R2 is not configured
@@ -415,6 +495,18 @@ def _run(opts: Options, store: Store, api: Any, r2: Any, today: date, now: Calla
 
     weeks = _target_weeks(opts, row, today)
     ingest_lines.append(("weeks", f"{weeks[0]}-{weeks[-1]} of {last_week(row)} (Selection Sunday {row.selection_sunday})"))
+    if opts.week is None and not opts.range_mode:
+        catch_up = missing_weeks(store, opts.table, season, weeks[0])
+        if len(catch_up) > opts.max_catch_up:
+            raise RunFailure(
+                CATCHUP_FAILURE_MARKER,
+                f"weeks {catch_up} of season {season} have no rows in {opts.table} before week {weeks[0]}, more than the "
+                f"catch-up limit of {opts.max_catch_up}: that is a backfill, not a Monday run. Run the \"Backfill Ratings\" "
+                f"workflow (season {season}, weeks 1-{weeks[0]}; it needs no API calls) and rerun, or raise --max-catch-up",
+            )
+        if catch_up:
+            weeks = catch_up + weeks
+            ingest_lines.append(("catch_up_weeks", f"{catch_up} (no rows in {opts.table}); published in this order before week {weeks[-1]}"))
 
     fading = [w for w in weeks if BASKETBALL_DEFAULT.prior_lambda(w) > 0]
     if fading and not prior_season_available(store, season - 1):
@@ -459,6 +551,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--staging", action="store_true", help="write ratings_staging; publish nothing unless --publish-staging")
     parser.add_argument("--publish-staging", action="store_true", help="with --staging: publish under the cbb-staging/ prefix")
     parser.add_argument("--dry-run", action="store_true", help="with --no-ingest: rate and report; write and publish nothing")
+    parser.add_argument("--max-catch-up", type=int, default=DEFAULT_MAX_CATCH_UP, metavar="N",
+                        help="default mode: most earlier weeks without ratings to rate and publish first (default %(default)s)")
     parser.add_argument("--allow-missing-prior", action="store_true",
                         help="do not fail when the prior season is not stored (weeks 1-6 then rate without priors)")
     return parser
@@ -477,12 +571,14 @@ def parse_options(argv: list[str] | None = None) -> Options:
         parser.error("--week must be >= 1")
     if args.publish_staging and not args.staging:
         parser.error("--publish-staging needs --staging")
+    if args.max_catch_up < 0:
+        parser.error("--max-catch-up must be >= 0")
     if args.dry_run and not args.no_ingest:
         parser.error("--dry-run needs --no-ingest (an ingest writes games)")
     return Options(
         season=args.season, week=args.week, weeks=args.weeks, all_weeks=args.all_weeks, no_ingest=args.no_ingest,
         staging=args.staging, publish_staging=args.publish_staging, dry_run=args.dry_run,
-        allow_missing_prior=args.allow_missing_prior,
+        allow_missing_prior=args.allow_missing_prior, max_catch_up=args.max_catch_up,
     )
 
 

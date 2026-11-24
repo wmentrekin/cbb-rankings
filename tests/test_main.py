@@ -1,7 +1,7 @@
 """The weekly orchestration with the local sqlite store, replayed API fixtures and a fake S3."""
 import json
 import re
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -291,7 +291,7 @@ def test_an_unexpected_exception_is_a_weekly_failure(store, monkeypatch):
     (date(2026, 10, 26), "outside_season"),   # before the 2026-27 window opens
     (date(2026, 3, 23), "outside_season"),    # the Monday after the last week was published
     (date(2026, 4, 6), "outside_season"),     # April
-    (date(2030, 1, 7), "season_not_configured"),
+    (date(2030, 7, 8), "outside_season"),     # an unconfigured season, but not in its months
 ])
 def test_out_of_season_mondays_do_nothing_and_spend_no_api_call(store, today, code):
     api, s3 = both_seasons_api(), FakeS3()
@@ -318,8 +318,9 @@ def test_a_brand_new_season_is_ingested_first_then_resolved(store):
 
 
 def test_selection_sunday_week_is_published_on_the_monday_after(store):
-    s3 = FakeS3()
-    code, lines = go(Options(), store, season_2026_api(), s3, today=date(2026, 3, 16))
+    s3, api = FakeS3(), season_2026_api()
+    assert go(Options(season=2026, weeks=(1, 18), allow_missing_prior=True), store, api, s3)[0] == 0  # nothing to catch up
+    code, lines = go(Options(allow_missing_prior=True), store, api, s3, today=date(2026, 3, 16))
     assert code == 0 and lines[-1] == "WEEKLY_OK season=2026 week=19"
     assert s3.json("cbb/rankings/index.json")["latest_week"] == 19
 
@@ -437,12 +438,14 @@ def test_dry_run_reports_and_writes_nothing(store):
 def test_monday_with_the_prior_season_present_runs_end_to_end(store):
     api, s3 = both_seasons_api(), FakeS3()
     assert go(Options(season=2026, all_weeks=True, allow_missing_prior=True), store, api, s3)[0] == 0
+    assert go(Options(season=2027, weeks=(1, 2)), store, api, s3, today=MONDAY_2026_11_23)[0] == 0  # weeks 1-2 are stored
     code, lines = go(Options(), store, api, s3, today=MONDAY_2026_11_23)
     assert code == 0 and lines[-1] == "WEEKLY_OK season=2027 week=3"
+    assert "catch_up_weeks" not in "\n".join(lines)
     assert count(store, where="season = 2027 AND week = 3") == 22
     assert "  model_warnings: none" in lines and not any("PRIOR" in ln for ln in lines)
     validate_week_payload(s3.json("cbb/rankings/2027/week-03.json"), 2027, 3, 22)
-    validate_index(s3.json("cbb/rankings/index.json"), [(2027, [3]), (2026, list(range(1, 20)))])
+    validate_index(s3.json("cbb/rankings/index.json"), [(2027, [1, 2, 3]), (2026, list(range(1, 20)))])
     assert s3.json("cbb/rankings/latest.json")["season"] == 2027 == s3.json("cbb/rankings/2027/latest.json")["season"]
     assert s3.json("cbb/rankings/2026/latest.json")["week"] == 19
 
@@ -483,3 +486,301 @@ def test_invalid_argument_combinations_exit_2(argv):
     with pytest.raises(SystemExit) as exc:
         main.parse_options(argv)
     assert exc.value.code == 2
+
+
+# -- the calendar decides the season: an unconfigured one fails in its months ------------------------------
+
+class NoApi:
+    """Any call is a bug: the day must resolve before the API is touched."""
+    calls = 0
+    quota_remaining = None
+
+    def get(self, path, params=None):
+        raise AssertionError("an API call was made")
+
+
+def days(start: date, end: date):
+    d = start
+    while d <= end:
+        yield d
+        d += timedelta(days=1)
+
+
+def test_an_unconfigured_season_fails_every_day_from_november_through_march_and_noops_otherwise(store):
+    """2028-29 and 2029-30 are not in seasons.json: walk a whole year (2028-04-01 .. 2029-03-31)."""
+    seen = {"failure": 0, "noop": 0, "warning": 0}
+    for today in days(date(2028, 4, 1), date(2029, 3, 31)):
+        code, lines = go(Options(), store, NoApi(), FakeS3(), today=today)
+        in_months = today.month >= 11 or today.month <= 3
+        if in_months:
+            assert code == 1, today
+            assert len(lines) == 1 and lines[0].startswith("WEEKLY_FAILURE: "), today
+            season = today.year + 1 if today.month >= 11 else today.year
+            assert "ingest/seasons.json" in lines[0] and f'add "{season}": ' in lines[0] and "selection_sunday" in lines[0]
+            seen["failure"] += 1
+        else:
+            assert code == 0, today
+            assert lines[-1].startswith("WEEKLY_NOOP: outside_season: "), today
+            if today.month in (9, 10):
+                assert len(lines) == 2 and lines[0].startswith("WEEKLY_WARNING: season 2029 ") and "ingest/seasons.json" in lines[0], today
+                seen["warning"] += 1
+            else:
+                assert len(lines) == 1, today  # April-August: nothing to say
+            seen["noop"] += 1
+    assert seen == {"failure": 151, "noop": 214, "warning": 61}
+    assert all(count(store, t) == 0 for t in ("games", "teams", "seasons", "ratings"))
+
+
+def test_a_configured_season_never_fails_for_missing_configuration_across_a_year(store):
+    """2025-26 and 2026-27 are configured: no day of 2026-04-01 .. 2027-10-31 may be a failure for
+    that reason, and the off-season days are quiet no-ops."""
+    ingest_run.ingest_season(store, 2027, season_2027_api())  # the season row exists, so no day needs an API call
+    for today in days(date(2026, 4, 1), date(2026, 10, 31)):
+        code, lines = go(Options(), store, NoApi(), FakeS3(), today=today)
+        assert code == 0 and lines == [lines[0]] and lines[0].startswith("WEEKLY_NOOP: outside_season: "), today
+    for today in days(date(2026, 11, 1), date(2026, 11, 8)):  # the season's first days: week 1 has not ended
+        code, lines = go(Options(), store, NoApi(), FakeS3(), today=today)
+        assert code == 0 and lines[0].startswith("WEEKLY_NOOP: no_week_to_publish: "), today
+    for today in days(date(2027, 3, 22), date(2027, 7, 31)):  # after the last week was published
+        code, lines = go(Options(), store, NoApi(), FakeS3(), today=today)
+        assert code == 0 and lines == [lines[0]] and lines[0].startswith("WEEKLY_NOOP: outside_season: "), today
+    for today in days(date(2027, 8, 1), date(2027, 8, 31)):  # season 2028 is unconfigured, but it is August
+        code, lines = go(Options(), store, NoApi(), FakeS3(), today=today)
+        assert code == 0 and len(lines) == 1 and lines[0].startswith("WEEKLY_NOOP: outside_season: "), today
+    assert all(count(store, t) == 0 for t in ("ratings", "ratings_staging"))
+
+
+def test_the_upcoming_season_warning_is_visible_but_not_a_failure(store):
+    code, lines = go(Options(), store, NoApi(), FakeS3(), today=date(2027, 9, 6))  # season 2028 is not configured
+    assert code == 0
+    assert lines[0].startswith("WEEKLY_WARNING: season 2028 starts in November and is not in ingest/seasons.json")
+    assert '"2028": {"selection_sunday": "YYYY-MM-DD"' in lines[0] and lines[1].startswith("WEEKLY_NOOP:")
+    code, lines = go(Options(), store, NoApi(), FakeS3(), today=date(2026, 9, 7))  # season 2027 is configured: silent
+    assert code == 0 and len(lines) == 1
+
+
+def test_an_unconfigured_season_named_by_a_week_flag_is_a_usage_error_even_off_season(store):
+    code, lines = go(Options(week=3), store, NoApi(), FakeS3(), today=date(2030, 7, 8))
+    assert code == 2 and lines[0].startswith("WEEKLY_FAILURE: season 2030 is not in")
+
+
+# -- catch-up: weeks without ratings are rated and published first -------------------------------------------
+
+def primed_with_2026(store):
+    api, s3 = both_seasons_api(), FakeS3()
+    assert go(Options(season=2026, all_weeks=True, allow_missing_prior=True), store, api, s3)[0] == 0
+    return api, s3
+
+
+def weeks_in(store, season=2027, table="ratings"):
+    return [r["week"] for r in store.query(f"SELECT DISTINCT week FROM {table} WHERE season = ? ORDER BY week", [season])]
+
+
+def ok_weeks(lines):
+    return [ln for ln in lines if ln.startswith("WEEKLY_OK")]
+
+
+def test_no_missed_week_publishes_only_the_resolved_week(store):
+    api, s3 = primed_with_2026(store)
+    go(Options(season=2027, weeks=(1, 2)), store, api, s3, today=MONDAY_2026_11_23)
+    puts_before = len(s3.puts)
+    code, lines = go(Options(), store, api, s3, today=MONDAY_2026_11_23)
+    assert code == 0 and ok_weeks(lines) == ["WEEKLY_OK season=2027 week=3"]
+    assert "catch_up_weeks" not in "\n".join(lines) and weeks_in(store) == [1, 2, 3]
+    assert [k for k in s3.puts[puts_before:] if "week-" in k] == ["cbb/rankings/2027/week-03.json"]
+
+
+def test_one_missed_week_is_rated_and_published_before_the_resolved_week(store):
+    api, s3 = primed_with_2026(store)
+    go(Options(season=2027, week=1), store, api, s3, today=MONDAY_2026_11_23)  # the run that should have rated week 2 never happened
+    puts_before = len(s3.puts)
+    code, lines = go(Options(), store, api, s3, today=MONDAY_2026_11_23)
+    assert code == 0
+    assert ok_weeks(lines) == ["WEEKLY_OK season=2027 week=2", "WEEKLY_OK season=2027 week=3"]  # ascending, each listed
+    assert any(ln.startswith("  catch_up_weeks: [2]") for ln in lines)
+    assert [k for k in s3.puts[puts_before:] if "week-" in k] == ["cbb/rankings/2027/week-02.json", "cbb/rankings/2027/week-03.json"]
+    assert weeks_in(store) == [1, 2, 3]
+    # week 3's deltas are against week 2 (the greatest earlier week), not against week 1
+    week2 = {r["team"]: r["rank"] for r in s3.json("cbb/rankings/2027/week-02.json")["rankings"]}
+    for r in s3.json("cbb/rankings/2027/week-03.json")["rankings"]:
+        assert r["delta"] == week2[r["team"]] - r["rank"]
+    assert s3.json("cbb/rankings/latest.json")["week"] == 3
+    validate_index(s3.json("cbb/rankings/index.json"), [(2027, [1, 2, 3]), (2026, list(range(1, 20)))])
+
+
+def test_two_missed_weeks_heal_in_ascending_order(store):
+    api, s3 = primed_with_2026(store)
+    puts_before = len(s3.puts)
+    code, lines = go(Options(), store, api, s3, today=MONDAY_2026_11_23)
+    assert code == 0 and lines[-1] == "WEEKLY_OK season=2027 week=3"
+    assert ok_weeks(lines) == [f"WEEKLY_OK season=2027 week={w}" for w in (1, 2, 3)]
+    assert any(ln.startswith("  catch_up_weeks: [1, 2]") for ln in lines)
+    assert [k for k in s3.puts[puts_before:] if "week-" in k] == [f"cbb/rankings/2027/week-0{w}.json" for w in (1, 2, 3)]
+    assert count(store, where="season = 2027") == 3 * 22
+
+
+def test_more_missed_weeks_than_the_cap_is_a_catch_up_failure_that_names_the_backfill_workflow(store):
+    api, s3 = primed_with_2026(store)
+    puts_before = len(s3.puts)
+    code, lines = go(Options(max_catch_up=1), store, api, s3, today=MONDAY_2026_11_23)  # weeks 1 and 2 are missing
+    assert code == 1
+    failure = [ln for ln in lines if ln.startswith("CATCHUP_FAILURE:")]
+    assert len(failure) == 1 and "Backfill Ratings" in failure[0] and "[1, 2]" in failure[0] and "limit of 1" in failure[0]
+    assert count(store, where="season = 2027") == 0 and len(s3.puts) == puts_before  # nothing rated or published
+    assert not any(ln.startswith("WEEKLY_OK") for ln in lines)
+
+
+def test_the_default_cap_is_four_weeks(store):
+    assert main.parse_options([]).max_catch_up == 4
+    assert main.parse_options(["--max-catch-up", "9"]).max_catch_up == 9
+    with pytest.raises(SystemExit):
+        main.parse_options(["--max-catch-up", "-1"])
+    # season 2026 on Monday 2025-12-22 resolves to week 7: weeks 1-6 are six missing weeks
+    store.upsert("ratings", [{"team_id": 1, "season": 2026, "week": 5, "rating": 1.0, "wins": 0, "losses": 0}],
+                 ("team_id", "season", "week"))
+    code, lines = go(Options(), store, season_2026_api(), FakeS3(), today=date(2025, 12, 22))
+    assert code == 1 and "weeks [1, 2, 3, 4, 6]" in "\n".join(lines) and "CATCHUP_FAILURE" in lines[-1]
+    assert count(store, where="week = 7") == 0
+
+
+def test_the_prior_season_requirement_applies_to_catch_up_weeks(store):
+    api, s3 = season_2026_api(), FakeS3()
+    assert go(Options(season=2026, weeks=(1, 4), allow_missing_prior=True), store, api, s3)[0] == 0
+    puts_before = len(s3.puts)
+    # Monday 2025-12-22 resolves to week 7 (no prior needed) but weeks 5 and 6 are missing and do need season 2025
+    code, lines = go(Options(), store, api, s3, today=date(2025, 12, 22))
+    assert code == 1 and any(ln.startswith("PRIOR_FAILURE:") and "weeks 5-6" in ln and "Backfill season 2025" in ln for ln in lines)
+    assert count(store, where="week > 4") == 0 and len(s3.puts) == puts_before
+    code, lines = go(Options(allow_missing_prior=True), store, api, s3, today=date(2025, 12, 22))
+    assert code == 0 and ok_weeks(lines) == [f"WEEKLY_OK season=2026 week={w}" for w in (5, 6, 7)]
+
+
+def test_staging_catch_up_uses_ratings_staging_and_publishes_nothing(store):
+    api, s3 = primed_with_2026(store)
+    puts_before = len(s3.puts)
+    production = count(store)
+    code, lines = go(Options(staging=True), store, api, s3=None, today=MONDAY_2026_11_23)
+    assert code == 0 and ok_weeks(lines) == [f"WEEKLY_OK season=2027 week={w}" for w in (1, 2, 3)]
+    assert weeks_in(store, table="ratings_staging") == [1, 2, 3] and weeks_in(store) == []
+    assert count(store) == production and len(s3.puts) == puts_before
+    # a rerun finds the staging table complete and rates only the resolved week
+    _, lines = go(Options(staging=True), store, api, s3=None, today=MONDAY_2026_11_23)
+    assert ok_weeks(lines) == ["WEEKLY_OK season=2027 week=3"]
+
+
+@pytest.mark.parametrize("opts", [Options(season=2027, week=3), Options(season=2027, weeks=(3, 3)), Options(season=2027, all_weeks=True)])
+def test_explicit_weeks_never_catch_up(store, opts):
+    api, s3 = primed_with_2026(store)
+    code, lines = go(opts, store, api, s3, today=MONDAY_2026_11_23)
+    assert code == 0 and "catch_up_weeks" not in "\n".join(lines)
+    assert weeks_in(store) == ([1, 2, 3] if opts.all_weeks else [3])
+
+
+def test_a_dry_run_reports_the_catch_up_weeks_and_writes_nothing(store):
+    api, s3 = primed_with_2026(store)
+    store.execute("DELETE FROM ratings WHERE season = 2027")
+    ingest_run.ingest_season(store, 2027, api)
+    puts = len(s3.puts)
+    code, lines = go(Options(no_ingest=True, dry_run=True), store, None, None, today=MONDAY_2026_11_23)
+    assert code == 0 and len(s3.puts) == puts and count(store, where="season = 2027") == 0
+    assert [ln for ln in lines if ln.startswith("WEEKLY_DRY_RUN")] == [f"WEEKLY_DRY_RUN season=2027 week={w} table=ratings mode=production" for w in (1, 2, 3)]
+
+
+# -- the override file is validated before anything is spent or written ------------------------------------
+
+@pytest.mark.parametrize("opts", [Options(), Options(season=2027), Options(season=2026, week=10)])
+def test_a_broken_override_file_fails_before_any_api_call_or_write(store, monkeypatch, tmp_path, opts):
+    bad = tmp_path / "overrides.json"
+    bad.write_text("{not json")
+    monkeypatch.setattr(overrides_module, "DEFAULT_OVERRIDES_PATH", bad)
+    api, s3 = both_seasons_api(), FakeS3()
+    code, lines = go(opts, store, api, s3, today=MONDAY_2026_11_23 if opts.season != 2026 else AFTER_2026)
+    assert code == 1 and api.calls == 0 and lines[0].startswith("OVERRIDE_FAILURE:") and len(lines) == 1
+    assert all(count(store, t) == 0 for t in ("games", "teams", "seasons", "ratings")) and s3.puts == []
+
+
+def test_a_score_override_on_a_game_that_becomes_neutralized_fails_the_run_with_a_fix_hint(store, monkeypatch, tmp_path):
+    path = tmp_path / "overrides.json"
+    path.write_text(json.dumps({"version": 1, "overrides": [{
+        "kind": "score", "game_id": 212784, "season": 2026, "home_team_id": 52, "away_team_id": 99,
+        "home_score": 70, "away_score": 72, "reason": "Official scorer corrected the final"}]}))
+    monkeypatch.setattr(overrides_module, "DEFAULT_OVERRIDES_PATH", path)
+    games = load("cbbd_games_2026.json")
+    target = next(g for g in games if g["id"] == 212784)
+    path.write_text(path.read_text().replace('"home_team_id": 52', f'"home_team_id": {target["homeTeamId"]}')
+                    .replace('"away_team_id": 99', f'"away_team_id": {target["awayTeamId"]}'))
+    s3 = FakeS3()
+    assert go(Options(season=2026, week=10), store, season_2026_api(), s3)[0] == 0  # the override applies while the game exists
+    api = FakeApi({2026: load("cbbd_teams_2026.json")}, {2026: [g for g in games if g["id"] != 212784]})
+    code, lines = go(Options(season=2026, week=10), store, api, s3)  # the source drops it: neutralized
+    assert code == 1
+    failure = next(ln for ln in lines if ln.startswith("OVERRIDE_FAILURE:"))
+    assert "game_id=212784" in failure and "only a final game can be re-scored" in failure
+    assert "ingest/game_result_overrides.json" in failure and "remove the entry" in failure
+
+
+# -- a failed ingest never leaves the overrides reverted ------------------------------------------------------
+
+SITE_OVERRIDE = {"kind": "site", "game_id": 213466, "season": 2026, "home_team_id": 902, "away_team_id": 344,
+                 "neutral_site": False, "swap_home_away": True, "reason": "Played at Washington State"}
+
+
+def with_site_override(monkeypatch, tmp_path):
+    path = tmp_path / "overrides.json"
+    path.write_text(json.dumps({"version": 1, "overrides": [SITE_OVERRIDE]}))
+    monkeypatch.setattr(overrides_module, "DEFAULT_OVERRIDES_PATH", path)
+
+
+def malformed_api():
+    games = load("cbbd_games_2026.json") + [
+        {"id": 9_100_000 + i, "startDate": "2025-11-05T00:00:00.000Z", "status": "final"} for i in range(6)]  # SYNTHETIC
+    return FakeApi({2026: load("cbbd_teams_2026.json")}, {2026: games})
+
+
+def test_a_failed_ingest_that_wrote_rows_still_restores_the_overrides(store, monkeypatch, tmp_path):
+    with_site_override(monkeypatch, tmp_path)
+    trip = Tripwire()
+    monkeypatch.setattr(main, "rate_week", trip)
+    s3 = FakeS3()
+    code, lines = go(Options(season=2026, week=10), store, malformed_api(), s3)
+    assert code == 1 and not trip.called
+    assert_stopped(store, s3, lines, "INGEST_FAILURE")
+    assert "overrides re-applied afterwards: 1 game(s) restored" in "\n".join(lines)
+    assert count(store, "games") == 40  # the fetched rows were written before the gate failed
+    assert store.query("SELECT home_team_id FROM games WHERE id = 213466")[0]["home_team_id"] == 344  # not reverted to 902
+    assert store.query("SELECT last_ingested_at FROM seasons")[0]["last_ingested_at"] is None  # and not stamped
+
+
+def test_a_failed_ingest_that_raised_after_writing_also_restores_the_overrides(store, monkeypatch, tmp_path):
+    with_site_override(monkeypatch, tmp_path)
+
+    def writes_then_dies(store_, season, client):
+        ingest_run.ingest_season(store_, season, season_2026_api())  # rows written, source values
+        assert store_.query("SELECT home_team_id FROM games WHERE id = 213466")[0]["home_team_id"] == 902
+        raise RuntimeError("connection dropped")
+
+    monkeypatch.setattr(main, "ingest_season", writes_then_dies)
+    code, lines = go(Options(season=2026, week=10), store, season_2026_api(), FakeS3())
+    assert code == 1 and any(ln.startswith("INGEST_FAILURE: RuntimeError: connection dropped") for ln in lines)
+    assert store.query("SELECT home_team_id FROM games WHERE id = 213466")[0]["home_team_id"] == 344
+
+
+def test_a_failed_ingest_that_wrote_nothing_does_not_touch_the_store(store, monkeypatch, tmp_path):
+    with_site_override(monkeypatch, tmp_path)
+    called = []
+    monkeypatch.setattr(main, "apply_overrides", lambda *a, **k: called.append(1))
+    api = FakeApi({2026: []}, {2026: load("cbbd_games_2026.json")})  # no teams: nothing written
+    code, lines = go(Options(season=2026, week=10), store, api, FakeS3())
+    assert code == 1 and called == [] and lines[0].startswith("INGEST_FAILURE: ") and "re-applied" not in lines[0]
+
+
+def test_ingest_cli_also_restores_overrides_after_a_failed_ingest(tmp_path, monkeypatch, capsys):
+    with_site_override(monkeypatch, tmp_path)
+    monkeypatch.setenv("CBB_STORE", "local")
+    monkeypatch.setenv("CBB_LOCAL_DB", str(tmp_path / "t.db"))
+    monkeypatch.setattr(ingest_run, "CbbdClient", malformed_api)
+    assert ingest_run.main(["season", "2026"]) == 1
+    out = capsys.readouterr().out
+    assert "INGEST_FAILURE: 6 of 46 fetched games were dropped" in out and "213466" in out.split('"overrides"')[1].split('"failed"')[0]
+    from database import get_store
+    assert get_store().query("SELECT home_team_id FROM games WHERE id = 213466")[0]["home_team_id"] == 344
