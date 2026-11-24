@@ -44,8 +44,8 @@ branching:
   branch_name: "claude/sleepy-tesla-rnjsvt"
 
 summary:
-  current_focus: "B1-B6 implemented, reviewed once and fixed; waiting on the owner for PRs, GitHub secrets and launch approval (gate G2). B7 deferred until the football margin fix settles."
-  last_completed: "Review-fix cycle 1 complete for B3/B4 (incl. least-optimal rating rule for undetermined teams) and B6; cbb-rankings at 648 passing tests; all pushed."
+  current_focus: "cbb-rankings PR #3 open for owner review; personal-site PR waits on merging main into the branch"
+  last_completed: "Model aligned with football 40a6b4f (no floor + shift, fade at week 10, target gap 5); 682 tests; PR #3 opened"
   current_blocker: ""
 
 artifacts:
@@ -54,9 +54,12 @@ artifacts:
   implementation_report: null
 
 pr:
-  number: null
-  url: null
-  status: "not_opened"
+  number: 3
+  url: "https://github.com/wmentrekin/cbb-rankings/pull/3"
+  status: "open"
+  other:
+    - repo: "wmentrekin/personal-site"
+      status: "pending: merging main (football Playoffs tab) into the refactor before opening"
 
 agents:
   - id: "orchestrator"
@@ -307,6 +310,7 @@ decisions:
   - "Owner: asked for the football margin-scale bug to be fixed; basketball therefore uses the documented formula (true median margin). The owner is doing the football fix in a separate session; the agent started here was stopped with no changes to cfb-rankings."
   - "Orchestrator: weekly run always does a full-season ingest (4 API calls); reported to the owner."
   - "Owner: undetermined ratings (unbeaten teams once the prior has faded) are published at the lowest optimal value; football-compatible mode keeps the solver's value."
+  - "Owner (2026-11-24): stay as close to cfb-rankings as possible: football's solver (OSQP) and solver-chosen undetermined ratings; adopt football's no-floor model and display shift; prior fades at week 10; target gap is half the median margin (5.0); cap stays 20. Asked for PRs."
   - "Owner (G1): provided a D1 Edit token (stored on the environment, proxy-injected) and asked the orchestrator to create the database; cbb-rankings D1 database created, id 4670facc-438e-40ce-9841-b4626c6ca3f0. Stay on the free CBBD quota."
 
 model_routing:
@@ -316,6 +320,6 @@ model_routing:
     - "balanced tier resolved to claude-sonnet-5-5 (the map lists Sonnet 5)"
   unresolved_limitations: []
 
-next_action: "On owner request: open PRs (cbb-rankings, personal-site). After merge and secrets: launch checklist in README. Then B7."
+next_action: "Finish the personal-site merge and open its PR; owner: secrets, review, launch approval; then B7"
 next_recommended_command: "$work"
 user_input_needed: true
