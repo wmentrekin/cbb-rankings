@@ -14,6 +14,7 @@ dependencies = [
     "clarabel==0.11.1",
     "osqp==1.1.1",
     "scs==3.2.11",
+    "boto3",
 ]
 
 [dependency-groups]
