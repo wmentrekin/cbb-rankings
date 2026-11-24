@@ -44,8 +44,8 @@ branching:
   branch_name: "claude/sleepy-tesla-rnjsvt"
 
 summary:
-  current_focus: "Verification: reviews of B3+B4 (model, weekly run, publishing) and B6 (basketball page) running; B7 deferred until the football margin fix settles"
-  last_completed: "B1-B4 implemented in cbb-rankings (557 tests), B5-B6 in personal-site; all pushed. B1/B2 and B5 each passed one review-fix cycle."
+  current_focus: "B1-B6 implemented, reviewed once and fixed; waiting on the owner for PRs, GitHub secrets and launch approval (gate G2). B7 deferred until the football margin fix settles."
+  last_completed: "Review-fix cycle 1 complete for B3/B4 (incl. least-optimal rating rule for undetermined teams) and B6; cbb-rankings at 648 passing tests; all pushed."
   current_blocker: ""
 
 artifacts:
@@ -306,6 +306,7 @@ decisions:
   - "Owner: Clarabel is the named solver; the parity run uses OSQP."
   - "Owner: asked for the football margin-scale bug to be fixed; basketball therefore uses the documented formula (true median margin). The owner is doing the football fix in a separate session; the agent started here was stopped with no changes to cfb-rankings."
   - "Orchestrator: weekly run always does a full-season ingest (4 API calls); reported to the owner."
+  - "Owner: undetermined ratings (unbeaten teams once the prior has faded) are published at the lowest optimal value; football-compatible mode keeps the solver's value."
   - "Owner (G1): provided a D1 Edit token (stored on the environment, proxy-injected) and asked the orchestrator to create the database; cbb-rankings D1 database created, id 4670facc-438e-40ce-9841-b4626c6ca3f0. Stay on the free CBBD quota."
 
 model_routing:
@@ -315,6 +316,6 @@ model_routing:
     - "balanced tier resolved to claude-sonnet-5-5 (the map lists Sonnet 5)"
   unresolved_limitations: []
 
-next_action: "Act on the two reviews (cycle 1 of 2 for B3/B4 and B6); PRs only when the owner asks; launch backfill only with owner approval (gate G2)"
+next_action: "On owner request: open PRs (cbb-rankings, personal-site). After merge and secrets: launch checklist in README. Then B7."
 next_recommended_command: "$work"
 user_input_needed: true
