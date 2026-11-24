@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from artifacts.r2 import PublishError
 from artifacts.rankings import build_payload, previous_week_with_data, rank_rows, stored_week
 
 NOW = datetime(2026, 3, 16, 10, 0, tzinfo=timezone.utc)
@@ -42,8 +43,56 @@ def test_payload_shape_rank_rounding_record_logo_and_conference(store):
 
 
 def test_ties_break_by_team_name_ascending_on_the_stored_rating():
-    rows = [{"team": "Zed", "rating": 50.0}, {"team": "Abe", "rating": 50.0}, {"team": "Mid", "rating": 50.001}]
+    rows = [{"team_id": 1, "team": "Zed", "rating": 50.0}, {"team_id": 2, "team": "Abe", "rating": 50.0},
+            {"team_id": 3, "team": "Mid", "rating": 50.001}]
     assert [(r["team"], r["rank"]) for r in rank_rows(rows)] == [("Mid", 1), ("Abe", 2), ("Zed", 3)]
+
+
+def test_ties_ignore_case_then_use_team_id_and_never_row_order():
+    tied = [{"team_id": 9, "team": "alabama", "rating": 0.0}, {"team_id": 4, "team": "Alabama", "rating": 0.0},
+            {"team_id": 7, "team": "Zips", "rating": 0.0}, {"team_id": 1, "team": "aardvark", "rating": 0.0},
+            {"team_id": 2, "team": "Zips", "rating": 0.0}, {"team_id": 5, "team": "Best", "rating": 1.0}]
+    expected = [("Best", 5), ("aardvark", 1), ("Alabama", 4), ("alabama", 9), ("Zips", 2), ("Zips", 7)]
+    for rows in (tied, tied[::-1], tied[2:] + tied[:2]):
+        assert [(r["team"], r["team_id"]) for r in rank_rows(rows)] == expected
+        assert [r["rank"] for r in rank_rows(rows)] == [1, 2, 3, 4, 5, 6]
+
+
+def test_many_teams_tied_at_the_floor_rank_stably_through_the_payload(store):
+    for team_id, name in [(3, "delta"), (1, "Charlie"), (2, "bravo"), (4, "Alpha"), (5, "Top")]:
+        add_team(store, team_id, name)
+    floor = (0.0, 0, 5)
+    add_ratings(store, 1, {3: floor, 1: floor, 2: floor, 4: floor, 5: (30.0, 5, 0)})
+    add_ratings(store, 2, {1: floor, 2: floor, 3: floor, 4: floor, 5: (31.0, 6, 0)})
+    wk2 = build_payload(store, 2026, 2, now=NOW)["rankings"]
+    assert [r["team"] for r in wk2] == ["Top", "Alpha", "bravo", "Charlie", "delta"]
+    assert [r["delta"] for r in wk2] == [0] * 5  # equal ratings keep the same order week to week
+
+
+def test_a_week_with_ratings_that_do_not_join_a_team_is_refused_naming_the_ids(store):
+    add_team(store, 1, "A")
+    add_team(store, 2, "B")
+    add_ratings(store, 1, {1: (10, 1, 0), 2: (5, 0, 1), 77: (3, 0, 2), 78: (2, 0, 3)})  # 77 and 78 have no teams row
+    with pytest.raises(PublishError, match=r"4 rows .* only 2 join .* missing team ids \[77, 78\]"):
+        build_payload(store, 2026, 1, now=NOW)
+    add_team(store, 77, "C")
+    add_team(store, 78, "D")
+    assert len(build_payload(store, 2026, 1, now=NOW)["rankings"]) == 4
+
+
+def test_a_team_row_of_another_season_does_not_complete_the_week(store):
+    add_team(store, 1, "A")
+    add_team(store, 2, "B", season=2025)
+    add_ratings(store, 1, {1: (10, 1, 0), 2: (5, 0, 1)})
+    with pytest.raises(PublishError, match=r"missing team ids \[2\]"):
+        build_payload(store, 2026, 1, now=NOW)
+
+
+def test_an_incomplete_previous_week_only_affects_deltas_not_the_publish(store):
+    add_team(store, 1, "A")
+    add_ratings(store, 1, {1: (10, 1, 0), 99: (5, 0, 1)})  # an orphan row in an old week
+    add_ratings(store, 2, {1: (10, 2, 0)})
+    assert [r["delta"] for r in build_payload(store, 2026, 2, now=NOW)["rankings"]] == [0]
 
 
 def test_delta_is_previous_rank_minus_current_against_the_greatest_earlier_week(store):

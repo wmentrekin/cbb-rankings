@@ -8,7 +8,9 @@ Shape (the contract the site already consumes; football's `build_payload` is the
                    "record": "30-3", "rating": 87.12, "delta": 2}, ...]}
 
 Rank is rating descending (the stored value, not the rounded one), ties broken by team name
-ascending. `delta` is the previous rank minus the current rank, where "previous" is the greatest
+ascending (case-insensitive), then team id, so the order never depends on row order. A week whose
+ratings rows do not all join to a `teams` row is refused (`PublishError`) rather than published
+short. `delta` is the previous rank minus the current rank, where "previous" is the greatest
 earlier week of the same season that has ratings; 0 when there is none or the team was not
 ranked then. `conference` is `teams.conference` as the source gives it (already a short display
 name); `logo` is `teams.logo_dark` or null.
@@ -18,6 +20,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Sequence
 
+from artifacts.r2 import PublishError
 from database.store import Store
 
 RATINGS_TABLES = ("ratings", "ratings_staging")  # the only tables a payload may be built from
@@ -30,16 +33,29 @@ def check_table(table: str) -> str:
     return table
 
 
-def stored_week(store: Store, season: int, week: int, table: str = "ratings") -> list[dict]:
-    """Stored ratings of one week joined to that season's teams."""
+def stored_week(store: Store, season: int, week: int, table: str = "ratings", *, require_complete: bool = True) -> list[dict]:
+    """Stored ratings of one week joined to that season's teams. Raises `PublishError` naming the
+    team ids when some ratings rows have no `teams` row for the season: the list would be short.
+    The previous week, read only for ranks, is not held to that (`require_complete=False`)."""
     check_table(table)
-    return store.query(
+    rows = store.query(
         f"SELECT r.team_id, t.school AS team, t.conference, t.logo_dark AS logo, "
         f"r.rating, r.wins, r.losses "
         f"FROM {table} r JOIN teams t ON t.id = r.team_id AND t.season = r.season "
         f"WHERE r.season = ? AND r.week = ?",
         [season, week],
     )
+    stored_ids = {r["team_id"] for r in store.query(
+        f"SELECT team_id FROM {table} WHERE season = ? AND week = ?", [season, week]
+    )}
+    if require_complete and len(rows) != len(stored_ids):
+        missing = sorted(stored_ids - {r["team_id"] for r in rows})
+        raise PublishError(
+            f"{table} has {len(stored_ids)} rows for season {season} week {week} but only {len(rows)} join to a team of "
+            f"that season: missing team ids {missing[:20]}{' ...' if len(missing) > 20 else ''}; not publishing a short "
+            f"ranking (re-ingest the season's teams, then rerun)"
+        )
+    return rows
 
 
 def previous_week_with_data(store: Store, season: int, week: int, table: str = "ratings") -> int | None:
@@ -53,8 +69,10 @@ def previous_week_with_data(store: Store, season: int, week: int, table: str = "
 
 
 def rank_rows(rows: Sequence[dict]) -> list[dict]:
-    """Rows ordered best first, each with `rank` (1 = best)."""
-    ordered = sorted(rows, key=lambda r: (-float(r["rating"]), r["team"]))
+    """Rows ordered best first, each with `rank` (1 = best). Equal ratings are common (many teams
+    sit at the rating floor), so the tie-break is explicit and total: team name, case-insensitively,
+    then team id."""
+    ordered = sorted(rows, key=lambda r: (-float(r["rating"]), r["team"].casefold(), r["team_id"]))
     return [{**r, "rank": i} for i, r in enumerate(ordered, 1)]
 
 
@@ -67,7 +85,7 @@ def build_payload(
         raise ValueError(f"no stored ratings in {table} for season {season} week {week}")
     previous_week = previous_week_with_data(store, season, week, table)
     previous_rank = (
-        {r["team_id"]: r["rank"] for r in rank_rows(stored_week(store, season, previous_week, table))}
+        {r["team_id"]: r["rank"] for r in rank_rows(stored_week(store, season, previous_week, table, require_complete=False))}
         if previous_week is not None else {}
     )
     stamp = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
