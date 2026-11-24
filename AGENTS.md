@@ -4,7 +4,7 @@
 
 Weekly batch pipeline (GitHub Actions) that ranks NCAA Division I men's basketball teams with a
 convex quadratic program ported from `cfb-rankings`: ingest games from CollegeBasketballData
-(CBBD) into Cloudflare D1, solve, publish JSON to R2. Storage, ingestion (`ingest/`) and the model (`model/`) exist; publishing (`artifacts/`) arrives in a later batch. Plan:
+(CBBD) into Cloudflare D1, solve, publish JSON to R2. Storage, ingestion (`ingest/`), the model (`model/`), the weekly run (`main.py`) and publishing (`artifacts/`) exist. Plan:
 `docs/cbb-rankings-port/`. Source behaviour: `docs/source-probe.md`.
 
 ## Layout
@@ -24,12 +24,15 @@ convex quadratic program ported from `cfb-rankings`: ingest games from CollegeBa
   for dry runs
 - `model/` - `config.py` (`ModelConfig`, `FOOTBALL_COMPAT`, `BASKETBALL_DEFAULT`), `assemble.py`, `solve.py`,
   `pipeline.py` (`rate_week`); see `model/README.md`
+- `main.py` - the weekly run and the ratings-only backfill (`run(Options, store=, api=, r2=, today=)` is
+  the testable core); `artifacts/rankings.py` - the week payload from stored ratings;
+  `artifacts/r2.py` - boto3 client for R2 and `RankingsPublisher`
 - `scripts/backfill_games.py` - ingest-only backfill (dry run by default); workflow
   `.github/workflows/backfill-games.yml`
 - `tests/` - pytest; no network
 - `wrangler.jsonc` - only the `d1_databases` entry (used by `wrangler d1 migrations`)
 
-Packages are flat top-level directories (`database/`, `ingest/`, later `model/`, `artifacts/`);
+Packages are flat top-level directories (`database/`, `ingest/`, `model/`, `artifacts/`);
 pytest adds the repo root to `sys.path`.
 
 ## Commands
@@ -131,6 +134,35 @@ uv run pytest -q   # tests
 - The objective is built vectorized; keep it mathematically identical to football's (the parity tests
   are the check). Run `uv run pytest -q` (about 10 s; the 365-team scale test is included).
 
+## Weekly run rules (must be respected by every later task)
+
+- `main.py` order is fixed: `ingest_season` -> `apply_overrides` -> prior-season check -> `rate_week` ->
+  write ratings -> publish. Each failure stops the run with its marker and a non-zero exit, and
+  nothing after it runs: `INGEST_FAILURE`, `OVERRIDE_FAILURE`, `PRIOR_FAILURE`, `MODEL_FAILURE`,
+  `WRITE_FAILURE`, `PUBLISH_FAILURE`, `WEEKLY_FAILURE` (usage, unexpected). Success is
+  `WEEKLY_OK season=S week=W`; a no-op Monday prints `WEEKLY_NOOP: <code>: <why>` and exits 0. The
+  workflow runs the deploy hook only after `WEEKLY_OK`; never add `|| true`.
+- The scheduled path never takes a shortcut: always `ingest_season` (4 calls), except that a no-op
+  Monday decides from `ingest/seasons.json` (window Nov 1 of S-1 through Selection Sunday + 7 days)
+  and the stored season row, with no API call. A season with no row is ingested first, then resolved.
+- A week is publishable only if it has ended and is on or before `last_week(row)`.
+  Weeks 1-6 (`ModelConfig.prior_lambda > 0`) require season S-1's teams and rated games in the
+  store (`PRIOR_FAILURE`), unless `--allow-missing-prior`.
+- Ratings are stored rounded to 6 decimals so solver noise does not rewrite D1 rows; the write is
+  `store.upsert` on (team_id, season, week) plus one `DELETE` of that (season, week)'s rows whose team
+  is not in the result, with the integers carried in one JSON parameter (`json_extract` / `json_each`,
+  never bound integers). Staging runs write `ratings_staging` only.
+- Artifacts are built from the stored rows (`artifacts.rankings.build_payload`), never from the
+  model result. Keys live under one prefix (`cbb/`, or `cbb-staging/` for `--publish-staging`);
+  `artifacts.r2` never lists, reads or writes outside it (football's `rankings/...` and
+  `schedule/...` share the bucket). `latest.json` files follow the true latest week; the index is
+  rebuilt by listing. Publishing errors raise `PublishError`; nothing is swallowed. The JSON shapes
+  are a contract with the site (`docs/cbb-rankings-port/plan.yaml`): do not change them.
+- Ratings-only mode (`--weeks A-B` / `--all-weeks`, `--no-ingest`, `--dry-run`) is the only way to
+  fill history; it is idempotent (0 D1 rows on a rerun; artifacts are re-uploaded).
+- `n_flat_teams` (teams with no losses, rating undetermined once the prior has faded) is logged in
+  the run summary only.
+
 ## Operator tools: overrides and backfill
 
 Overrides (`ingest/game_result_overrides.json`, `{"version": 1, "overrides": [...]}`, shipped empty).
@@ -188,9 +220,10 @@ rerun of an unchanged season estimates 1 row (the season's `last_ingested_at`).
 ## Secrets (names only)
 
 `CBBD_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, `CLOUDFLARE_API_TOKEN`
-(non-secret settings: `CBB_STORE`, `CBB_LOCAL_DB`, `CBBD_QUOTA_FLOOR`, `INGEST_MAX_DROPPED`); later
-tasks add `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`,
-`PERSONAL_SITE_DEPLOY_HOOK_URL`. Never log or commit values. In cloud agent sessions the token
+(non-secret settings: `CBB_STORE`, `CBB_LOCAL_DB`, `CBBD_QUOTA_FLOOR`, `INGEST_MAX_DROPPED`);
+`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` (the weekly run and the
+ratings backfill), `PERSONAL_SITE_DEPLOY_HOOK_URL` (only the weekly workflow's hook step reads it).
+Never log or commit values. In cloud agent sessions the token
 variable may hold the placeholder `proxy-injected`; a proxy supplies the real credential.
 
 ## Shared Workflow Framework

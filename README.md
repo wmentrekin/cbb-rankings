@@ -5,8 +5,8 @@ ported from `cfb-rankings`. A weekly GitHub Actions job ingests games from
 [CollegeBasketballData](https://collegebasketballdata.com) into Cloudflare D1, solves the model,
 and publishes JSON rankings to R2 for the site.
 
-Status: storage, ingestion, result overrides, backfill and the model. Orchestration and publishing
-are planned in `docs/cbb-rankings-port/plan.yaml`.
+Status: storage, ingestion, result overrides, backfill, the model, the weekly run and publishing to
+R2 (plan: `docs/cbb-rankings-port/plan.yaml`). Not live until the launch checklist below is done.
 
 ## Storage
 
@@ -130,6 +130,95 @@ or an `OVERRIDE_FAILURE`. The estimate for CHANGED rows is a model that has not 
 against real D1. The same job is the
 manual "Backfill Games" workflow (inputs `season`, `week`, `apply`, `max_rows_written`).
 
+## Weekly run and publishing
+
+`main.py` is the entry point of the Monday job (workflow `weekly-update.yml`, cron `0 10 * * 1`
+plus a manual dispatch with optional `season` and `week`):
+
+```
+uv run python main.py                                   # today's season, the week that ended yesterday
+uv run python main.py --season 2027 --week 4            # one explicit week
+uv run python main.py --season 2027 --week 4 --staging  # writes ratings_staging, publishes nothing
+uv run python main.py --season 2026 --all-weeks --no-ingest --dry-run   # ratings backfill plan
+```
+
+One run: `ingest_season` (4 API calls) -> `apply_overrides` -> prior-season check -> `rate_week` ->
+upsert `ratings` (rounded to 6 decimals, stale rows of that season and week deleted) -> publish the
+week artifacts to R2 -> summary and `WEEKLY_OK season=S week=W`. The workflow then calls the
+`PERSONAL_SITE_DEPLOY_HOOK_URL` deploy hook, only after a run that printed `WEEKLY_OK`.
+
+Markers (printed on their own line; each stops the run and exits non-zero unless noted):
+
+| Marker | Meaning |
+| --- | --- |
+| `WEEKLY_NOOP: <code>: <why>` | exit 0, nothing done, no API call, no deploy hook. Codes: `outside_season` (today is outside Nov 1 through the Sunday after Selection Sunday), `no_week_to_publish` (week 1 has not ended, or the Selection Sunday week was already published), `season_not_configured` (the season is not in `ingest/seasons.json`) |
+| `INGEST_FAILURE` | `IngestSummary.ok` is false, or the fetch raised (including the quota floor); nothing after it runs, so stale ratings are never republished |
+| `OVERRIDE_FAILURE` | an override entry or the file failed; the run stops before the model (a known-wrong game would be rated) |
+| `PRIOR_FAILURE` | weeks 1-6 (prior weight above 0) need season S-1's games stored: backfill it, or pass `--allow-missing-prior` |
+| `MODEL_FAILURE` | `ModelSolveError` / `NoTeamsError`; nothing written |
+| `WRITE_FAILURE` | the ratings write failed; nothing published, a rerun is idempotent |
+| `PUBLISH_FAILURE` | R2 not configured, or an upload or listing failed; ratings stay written, the site is not rebuilt |
+| `WEEKLY_FAILURE` | usage errors (exit 2) and anything unexpected |
+| `WEEKLY_OK` | success; `RANGE_DONE` closes a range run, `WEEKLY_DRY_RUN` replaces `WEEKLY_OK` in a dry run |
+
+A season with no `seasons` row yet (a new season's first Monday) is ingested first (the only way to
+learn its anchor) when the date is inside the season window, then the week is resolved; every other
+Monday decides from `ingest/seasons.json` and the stored row without an API call.
+
+Modes: `--season` / `--week` override the target (a week must have ended and be on or before the
+Selection Sunday week). `--weeks A-B` or `--all-weeks` (season required) rate weeks in order from
+stored data after one ingest, or none with `--no-ingest`; `--dry-run` (needs `--no-ingest`) rates,
+compares with the stored ratings and prints what would be written and published. `--staging` writes
+`ratings_staging` and publishes nothing, unless `--publish-staging` publishes under `cbb-staging/`
+(the production prefix is never touched by a staging run; the staging ingest still writes `games`
+and `teams`). Reruns are idempotent: unchanged ratings write 0 rows; artifacts are re-uploaded
+(the week file differs only in `generated_at_utc`).
+
+Artifacts (`artifacts/`): the week payload is built from the STORED `ratings` joined to `teams`, so a
+republish equals the original: `{season, week, generated_at_utc, rankings: [{rank, team, conference,
+logo, record, rating, delta}]}`, ranked by rating descending then team name, `rating` rounded to 2
+decimals, `delta` = previous rank minus rank against the greatest earlier week of the season that
+has ratings. R2 keys (prefix `cbb/`; same bucket as football, whose `rankings/` and `schedule/` keys
+are never listed, read or written):
+
+```
+cbb/rankings/{season}/week-{WW}.json   cbb/rankings/{season}/latest.json
+cbb/rankings/latest.json               cbb/rankings/index.json   {generated_at_utc, latest_season, latest_week, seasons:[{season, weeks}]}
+```
+
+`latest.json` files only move when the published week is the newest (a backfill of an old week
+leaves them alone); the index is rebuilt by listing the bucket. Publishing never swallows an error.
+Typical size: about 85 KB per week file (365 teams, indented JSON), 1.6 MB for a 19-week season.
+
+Budgets: a Monday run is 4 CBBD calls; D1 rows written are the changed games (1 row each, more only
+when `week` or `is_rated` change), 365 `ratings` rows (WITHOUT ROWID, one row per insert) and the
+season stamp, roughly 1,500 (changed-row costs are unverified against real D1); R2 is 4 puts and a
+listing. A full-season ratings backfill is 365 x 19 = 6,935 D1 rows and no API call.
+
+### Launch checklist (operator; not executed by any code)
+
+1. Add the GitHub secrets: `CBBD_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`,
+   `CLOUDFLARE_API_TOKEN`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
+   `R2_BUCKET_NAME`, `PERSONAL_SITE_DEPLOY_HOOK_URL`. No cost.
+2. Backfill games with "Backfill Games" (dry run, then apply; the apply reuses the dry run's
+   responses): season 2026 (2025-26, the prior of the current season) and season 2027 (2026-27).
+   Each is 4 API calls and about 19,000 D1 rows written for a full season (the 2027 slice is smaller
+   until the schedule fills in); both on one day stay well under the 100,000 per day limit. Optional:
+   season 2025 as well (4 calls, about 19,000 rows) so that 2025-26 is browsable with proper priors.
+3. Backfill ratings with "Backfill Ratings": staging first (`destination` staging, dry run, then
+   apply; then `staging-published` to check the R2 files), then `production`. For the weeks already
+   played of 2027 (and `all` for 2026). 0 API calls; D1 rows 365 per week per table (2026: 6,935;
+   2027 weeks 1-3: 1,095), staging and production each; R2 about 5 requests per week. Weeks 1-6 of
+   2026 need season 2025 stored, or `allow_missing_prior` ticked. Deltas need the earlier weeks
+   stored, so backfill every week from 1.
+4. Confirm Selection Sunday 2027 in `ingest/seasons.json` (currently `provisional`; the date decides
+   `is_rated` and the last published week). After a correction run `ingest.run season 2027`.
+5. Enable the weekly schedule: it is active once `weekly-update.yml` is on the default branch; the
+   first scheduled Monday run costs 4 API calls and the D1 rows above. Optionally rehearse one week
+   with "Test Week Run" first (4 calls, 365 `ratings_staging` rows plus the ingest writes).
+6. On the site repository, flip the basketball sport from optional to required, then rebuild (the
+   weekly job's deploy hook does it every Monday; "Backfill Ratings" does not call the hook).
+
 ## Model
 
 `model/` holds the optimization (`model/README.md`: formulation, configuration, differences from
@@ -147,7 +236,9 @@ uv run pytest -q
 
 CI uses `uv sync --frozen` and `uv run --frozen`. Copy `.env.example` to `.env` for local runs. Secrets (set in the repository settings for
 Actions): `CBBD_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, `CLOUDFLARE_API_TOKEN`
-(D1 edit permission). Use `CBB_STORE=local` to run against a local sqlite file instead. Optional
+(D1 edit permission), `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`
+(R2 object read/write on the bucket) and `PERSONAL_SITE_DEPLOY_HOOK_URL` (used by the weekly
+workflow only). Use `CBB_STORE=local` to run against a local sqlite file instead. Optional
 settings: `CBBD_QUOTA_FLOOR` (default 50) and `INGEST_MAX_DROPPED` (see `.env.example`).
 
 ## Migrations
@@ -162,3 +253,6 @@ Add `database/migrations/NNNN_description.sql`, then run the "Apply D1 Migration
 - `tests.yml` - pytest on every push and pull request
 - `apply-migrations.yml` - manual D1 migration apply
 - `backfill-games.yml` - manual ingest-only backfill, dry run unless `apply` is ticked
+- `weekly-update.yml` - Monday 10:00 UTC (and manual): the weekly run, then the site deploy hook
+- `test-week-run.yml` - manual `main.py --staging` rehearsal of one week
+- `backfill-ratings.yml` - manual ratings-only backfill from stored games, dry run unless `apply` is ticked

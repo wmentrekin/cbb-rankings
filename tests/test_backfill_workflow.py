@@ -26,8 +26,11 @@ def test_workflow_yaml_parses_and_declares_inputs():
 WORKFLOWS = sorted(WORKFLOW.parent.glob("*.yml"))
 
 
-def test_there_are_three_workflows():
-    assert [w.name for w in WORKFLOWS] == ["apply-migrations.yml", "backfill-games.yml", "tests.yml"]
+def test_the_workflow_set():
+    assert [w.name for w in WORKFLOWS] == [
+        "apply-migrations.yml", "backfill-games.yml", "backfill-ratings.yml", "test-week-run.yml", "tests.yml",
+        "weekly-update.yml",
+    ]
 
 
 @pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
