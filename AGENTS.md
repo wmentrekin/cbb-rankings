@@ -61,9 +61,11 @@ uv run pytest -q   # tests
   never interpolate values.
 - Budgets: free plan allows 100,000 rows written per day, and every index adds a written row per
   insert (a `games` insert writes 3 rows: table plus two indexes). A full 6,300-game season is
-  about 19,000 rows written on first insert; re-runs write 0 when nothing changed. The insert and
-  no-op costs are verified against real D1; the cost of CHANGED rows (the backfill planner's model:
-  1 row, plus 2 index rows when `week` or `is_rated` changes) is NOT verified against real D1. Add indexes
+  about 19,000 rows written on first insert; re-runs write 0 when nothing changed. Verified on real
+  D1 (storage task): a 1,200-row `games` upsert in chunks of 500/500/200 and a 365-row `ratings`
+  upsert (the insert and unchanged-rerun costs). Not verified: a full 6,300-game season in one run, and
+  the cost of CHANGED rows (the backfill planner's model: 1 row, plus 2 index rows when `week` or
+  `is_rated` changes). Add indexes
   only for planned queries. Composite-key tables are `WITHOUT ROWID` so the key is not a second
   written row. Report `WriteStats.rows_written` from any bulk job.
 - API budget: 1,200 requests per 5 minutes. Time Travel keeps 7 days.
@@ -96,14 +98,20 @@ uv run pytest -q   # tests
   the season).
 - Gates: `IngestSummary.ok` / `.failures`. A run fails on no teams or no games fetched (for a week:
   only inside the season), dropped or malformed rows above the threshold (larger of 5 and 0.5% of
-  rows fetched; env `INGEST_MAX_DROPPED` or `max_dropped_rows`), or a season fetch under 90% of the
-  stored games (nothing is neutralized then). `last_ingested_at` is stamped only by a run that
+  rows fetched; env `INGEST_MAX_DROPPED` or `max_dropped_rows`), or more stored games absent from a
+  full season fetch than the allowance (larger of 5 and 0.5% of the stored games of the season; env
+  `INGEST_MAX_ABSENT`, argument `max_absent_games`, CLI `--allow-absent N`): a truncated fetch looks
+  like that, so nothing is neutralized and NO game row is written (teams and the seasons row are
+  upserted; the season is not stamped). The operator override `--allow-absent N` exists on
+  `python -m ingest.run season` and `scripts/backfill_games.py` only; the weekly workflow never sets
+  it (nor the env var). `last_ingested_at` is stamped only by a run that
   passed every gate, after all writes; all API calls precede the first write. `ingest_week` raises
   `SeasonNotIngestedError` (no API call) when the season row is missing or `last_ingested_at` is NULL.
   The CLI and `scripts/backfill_games.py` exit non-zero when `ok` is false and print
   `INGEST_FAILURE: <reasons>` (CI and the orchestration grep for it).
 - Guards on the stored season (anomaly kinds in `summary.anomalies`, first ids in `anomaly_ids`):
-  `absent_from_source` - a stored game missing from a complete season fetch is neutralized
+  `absent_from_source` - a stored game missing from a complete season fetch (up to the allowance
+  above) is neutralized
   (`is_rated = 0`, status `cancelled`, result cleared, row kept; counted once, when neutralized, and
   restored if the source relists it); `duplicate_rated_pair` - rows with the same unordered team pair
   and `game_date` that would all be rated and played keep only the largest id rated (re-reported on
@@ -111,7 +119,9 @@ uv run pytest -q   # tests
   one is a warning only (stored teams are never deleted).
 - CBBD quota (about 1,000 calls a month) is shared with a live football pipeline: a full season is 4
   calls. `CbbdClient` reads `X-CallLimit-Remaining` after every call and raises `QuotaFloorError`
-  before the next one once it is below `CBBD_QUOTA_FLOOR` (default 50); a 429 is retried once
+  before the next one once it is below `CBBD_QUOTA_FLOOR` (default 50); a response without a readable
+  header sets `quota_header_missing` and the ingest summary carries a warning once per run (the floor
+  cannot protect the quota then, but the run does not fail); a 429 is retried once
   unless it carries `Retry-After`. Check `IngestSummary.api_calls` and `quota_remaining`; do not
   add per-game or per-team calls. Never log the API key.
 - `ingest.derive.eastern_date` rejects timestamps without an offset and bare dates (the row becomes
@@ -128,7 +138,8 @@ uv run pytest -q   # tests
 - Every constant lives in `model.config.ModelConfig`. `FOOTBALL_COMPAT` and the football-parity tests
   are frozen yardsticks (`tests/reference/**` is never edited); `BASKETBALL_DEFAULT` may differ only
   where `tests/test_model_config.py` says so. The margin-scale basis is chosen in one line,
-  `BASKETBALL_MARGIN_SCALE_BASIS` in `model/config.py` (pending owner decision).
+  `BASKETBALL_MARGIN_SCALE_BASIS` in `model/config.py`; the owner decided (2026-11-23) that basketball
+  uses the true median margin, `"margin"` (football is being fixed separately to match).
 - Production solver is CLARABEL, named in config; only status `optimal` is accepted, anything else
   raises `ModelSolveError` so an unattended run fails loudly. Parity tests pass `solver="OSQP"`.
 - The objective is built vectorized; keep it mathematically identical to football's (the parity tests
@@ -136,12 +147,29 @@ uv run pytest -q   # tests
 
 ## Weekly run rules (must be respected by every later task)
 
-- `main.py` order is fixed: `ingest_season` -> `apply_overrides` -> prior-season check -> `rate_week` ->
+- `main.py` order is fixed: validate the override file (before any API call or write) ->
+  `ingest_season` -> `apply_overrides` -> catch-up weeks -> prior-season check -> `rate_week` ->
   write ratings -> publish. Each failure stops the run with its marker and a non-zero exit, and
-  nothing after it runs: `INGEST_FAILURE`, `OVERRIDE_FAILURE`, `PRIOR_FAILURE`, `MODEL_FAILURE`,
-  `WRITE_FAILURE`, `PUBLISH_FAILURE`, `WEEKLY_FAILURE` (usage, unexpected). Success is
-  `WEEKLY_OK season=S week=W`; a no-op Monday prints `WEEKLY_NOOP: <code>: <why>` and exits 0. The
-  workflow runs the deploy hook only after `WEEKLY_OK`; never add `|| true`.
+  nothing after it runs: `INGEST_FAILURE`, `OVERRIDE_FAILURE`, `CATCHUP_FAILURE`, `PRIOR_FAILURE`,
+  `MODEL_FAILURE`, `WRITE_FAILURE`, `PUBLISH_FAILURE`, `WEEKLY_FAILURE` (usage, unexpected, or a
+  season missing from `ingest/seasons.json` from Nov 1 through Mar 31). Success is
+  `WEEKLY_OK season=S week=W` (one line per week published); a no-op Monday prints
+  `WEEKLY_NOOP: <code>: <why>` and exits 0. The workflow runs the deploy hook only after `WEEKLY_OK`;
+  never add `|| true`. A failed ingest that wrote rows still runs `apply_overrides` before the run
+  fails, so stored data never keeps the overridden games reverted.
+- The season of a scheduled run comes from the calendar alone (`season_for_date`). Not configured in
+  `ingest/seasons.json` means: Nov 1 through Mar 31, `WEEKLY_FAILURE` (naming the entry to add);
+  April through October, a no-op, with a `WEEKLY_WARNING` line in September and October. Add each
+  season's entry (Selection Sunday, `provisional: true` until confirmed) before September.
+- Catch-up (default mode, no `--week`/`--weeks`/`--all-weeks`): after ingest and overrides, every
+  week from 1 to the resolved week that has no rows in the target ratings table (`ratings`, or
+  `ratings_staging` with `--staging`) is rated, written and published in ascending order BEFORE the
+  resolved week, so a failed or skipped Monday heals on the next run and deltas use the right previous
+  week. At most `--max-catch-up` (default 4) earlier weeks; more is `CATCHUP_FAILURE` telling the
+  operator to run the "Backfill Ratings" workflow. The prior-season requirement covers catch-up
+  weeks. Limit: only a missing ratings table row triggers a catch-up; a week whose ratings were
+  written but whose upload failed (`PUBLISH_FAILURE`) is republished by rerunning it explicitly
+  (`--week`), not by the next Monday.
 - The scheduled path never takes a shortcut: always `ingest_season` (4 calls), except that a no-op
   Monday decides from `ingest/seasons.json` (window Nov 1 of S-1 through Selection Sunday + 7 days)
   and the stored season row, with no API call. A season with no row is ingested first, then resolved.
@@ -191,6 +219,12 @@ rejected, and `reason` must be a non-empty human explanation. A game takes at mo
   status fails that entry only: it is logged `OVERRIDE_FAILURE: game_id=... reason=...`, listed in
   the returned `OverrideSummary.failed`, and the rest still apply. A malformed file raises
   `OverrideFileError` (also logged with the marker). Entries for other seasons are skipped.
+- A `score` entry pointing at a game that later becomes cancelled or is neutralized as absent from
+  the source fails (`only a final game can be re-scored`), and so does any entry whose team ids or
+  season no longer match the stored row: the run stops with `OVERRIDE_FAILURE` naming the game id
+  until a person removes or corrects the entry (intended: a changed game needs a human decision).
+  `exclude` and `site` entries on such a game still apply harmlessly. The file itself is validated
+  before the weekly run spends any API call or writes anything.
 - ORDERING RULE: ingest upserts rewrite an overridden game from the source, so
   `ingest.overrides.apply_overrides(store, season)` must run right after every ingest and before the
   model reads games. `python -m ingest.run` and `scripts/backfill_games.py` do this themselves and
@@ -210,7 +244,8 @@ row, 1 per changed row, plus 2 index rows when week/is_rated change; the guards'
 unrated rows are included because they go through the same upsert; the overrides add 1 row for
 `score`/`site` and 3 for `exclude`), anomalies, warnings, API calls and quota left, and writes
 nothing (`PlanningStore` rejects every write but `upsert`, which it only counts). The changed-row
-cost model is UNVERIFIED against real D1 (the insert and no-op cases are verified). `--apply`
+cost model is UNVERIFIED against real D1 (the insert and no-op cases were verified on a 1,200-row
+`games` upsert in chunks of 500/500/200 and a 365-row `ratings` upsert). `--apply`
 reuses the dry run's responses (no extra calls), writes, applies the overrides and prints
 `BACKFILL_APPLIED season=S [week=W] ...`. It is refused (exit 2) when the estimate exceeds
 `--max-rows-written` (default 40,000; a fresh full season is about 19,000). Exit 1 on a
@@ -220,7 +255,7 @@ rerun of an unchanged season estimates 1 row (the season's `last_ingested_at`).
 ## Secrets (names only)
 
 `CBBD_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, `CLOUDFLARE_API_TOKEN`
-(non-secret settings: `CBB_STORE`, `CBB_LOCAL_DB`, `CBBD_QUOTA_FLOOR`, `INGEST_MAX_DROPPED`);
+(non-secret settings: `CBB_STORE`, `CBB_LOCAL_DB`, `CBBD_QUOTA_FLOOR`, `INGEST_MAX_DROPPED`, `INGEST_MAX_ABSENT`);
 `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` (the weekly run and the
 ratings backfill), `PERSONAL_SITE_DEPLOY_HOOK_URL` (only the weekly workflow's hook step reads it).
 Never log or commit values. In cloud agent sessions the token

@@ -10,8 +10,10 @@ the API calls once.
 
 Estimate: a new row writes 1 row plus one per index (`games` has two); a changed row writes 1,
 plus the index rows when an indexed column changed. D1's own `rows_written` meta is the truth;
-this is the figure used to guard against a bulk run that would eat the daily budget. The insert
-and no-op costs are verified against real D1; the CHANGED-row cost is a model that has not
+this is the figure used to guard against a bulk run that would eat the daily budget. What was
+verified on real D1 (during the storage task) is a 1,200-row `games` upsert sent in chunks of
+500, 500 and 200 rows and a 365-row `ratings` upsert: the insert and unchanged-rerun costs
+come from those. A full 6,300-game season and the CHANGED-row cost are a model that has not
 been checked against real D1.
 
 Everything the ingest does to stored games (the rows it re-derives, the absent games it
