@@ -368,3 +368,18 @@ def test_overrides_are_restored_only_when_applied_after_a_reingest(ingested, tmp
     s = apply_overrides(ingested, 2026, path=path)  # ... so overrides run after it
     assert sorted(s.applied) == sorted(ids) and s.ok
     assert {g: game(ingested, g) for g in ids} == corrected
+
+
+def test_a_game_neutralized_as_absent_fails_a_score_entry_but_not_exclude_or_site(store, tmp_path, caplog):
+    run.ingest_season(store, 2026, season_2026_api())
+    from tests.fakes import FakeApi, load
+    api = FakeApi({2026: load("cbbd_teams_2026.json")}, {2026: [g for g in load("cbbd_games_2026.json") if g["id"] != HOME_WIN]})
+    run.ingest_season(store, 2026, api)  # the source dropped the game: it is now cancelled and unrated
+    assert (game(store, HOME_WIN)["status"], game(store, HOME_WIN)["is_rated"]) == ("cancelled", 0)
+    path = write(tmp_path, [entry(store, HOME_WIN, "score")])
+    with caplog.at_level(logging.ERROR):
+        summary = apply_overrides(store, 2026, path=path)
+    assert [f["game_id"] for f in summary.failed] == [HOME_WIN] and "only a final game can be re-scored" in summary.failed[0]["reason"]
+    others = [entry(store, HOME_WIN, "exclude"), entry(store, HOME_WIN, "site", neutral_site=False)]
+    assert apply_overrides(store, 2026, path=write(tmp_path, [others[0]])).ok
+    assert apply_overrides(store, 2026, path=write(tmp_path, [others[1]])).ok

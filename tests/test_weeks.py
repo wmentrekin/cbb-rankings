@@ -165,3 +165,9 @@ def test_selection_sunday_must_be_a_sunday(tmp_path):
 def test_every_shipped_selection_sunday_is_a_sunday():
     for season in json.loads(weeks.SEASONS_FILE.read_text()):
         assert load_selection_sunday(int(season)).weekday() == 6
+
+
+def test_season_2025_is_configured_for_the_prior_season_backfill(caplog):
+    selection_sunday = load_selection_sunday(2025)
+    assert selection_sunday == date(2025, 3, 16) and selection_sunday.strftime("%A") == "Sunday"
+    assert not weeks.is_provisional(2025) and not [r for r in caplog.records if "PROVISIONAL" in r.message]
