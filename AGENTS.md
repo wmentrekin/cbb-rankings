@@ -128,7 +128,9 @@ uv run pytest -q   # tests
 - Every constant lives in `model.config.ModelConfig`. `FOOTBALL_COMPAT` and the football-parity tests
   are frozen yardsticks (`tests/reference/**` is never edited); `BASKETBALL_DEFAULT` may differ only
   where `tests/test_model_config.py` says so. The margin-scale basis is chosen in one line,
-  `BASKETBALL_MARGIN_SCALE_BASIS` in `model/config.py` (pending owner decision).
+  `BASKETBALL_MARGIN_SCALE_BASIS` in `model/config.py` (owner decision 2026-11-23: the true median
+  margin). Undetermined ratings (quirk 13: unbeaten teams at lambda 0) are published at their least
+  optimal value (`flat_rating_rule="min_feasible"`; football keeps `"solver"`).
 - Production solver is CLARABEL, named in config; only status `optimal` is accepted, anything else
   raises `ModelSolveError` so an unattended run fails loudly. Parity tests pass `solver="OSQP"`.
 - The objective is built vectorized; keep it mathematically identical to football's (the parity tests
