@@ -1,7 +1,7 @@
 # CBBD source probe (B1-T1)
 
 Probe of the CollegeBasketballData API (`https://api.collegebasketballdata.com`) run on 2026-11-23
-to settle the provisional schema in `docs/cbb-rankings-port/plan.yaml`. All numbers come from saved
+to settle the schema that was provisional in the plan at the time. All numbers come from saved
 responses for the completed 2025-26 season (`season=2026`) and a spot-check of 2026-27 (`season=2027`,
 games through 2026-11-23 plus the schedule to 2026-12-01).
 

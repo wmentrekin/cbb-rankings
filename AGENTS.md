@@ -4,8 +4,8 @@
 
 Weekly batch pipeline (GitHub Actions) that ranks NCAA Division I men's basketball teams with a
 convex quadratic program ported from `cfb-rankings`: ingest games from CollegeBasketballData
-(CBBD) into Cloudflare D1, solve, publish JSON to R2. Storage, ingestion (`ingest/`), the model (`model/`), the weekly run (`main.py`) and publishing (`artifacts/`) exist. Plan:
-`docs/cbb-rankings-port/`. Source behaviour: `docs/source-probe.md`.
+(CBBD) into Cloudflare D1, solve, publish JSON to R2. Storage, ingestion (`ingest/`), the model (`model/`), the weekly run (`main.py`) and publishing (`artifacts/`) exist.
+Source behaviour: `docs/source-probe.md`.
 
 ## Layout
 
@@ -195,7 +195,8 @@ uv run pytest -q   # tests
   `artifacts.r2` never lists, reads or writes outside it (football's `rankings/...` and
   `schedule/...` share the bucket). `latest.json` files follow the true latest week; the index is
   rebuilt by listing. Publishing errors raise `PublishError`; nothing is swallowed. The JSON shapes
-  are a contract with the site (`docs/cbb-rankings-port/plan.yaml`): do not change them.
+  are a contract with the site (README, "R2 keys"; the consumer is personal-site's
+  `scripts/fetch-rankings-data.mjs`): do not change them.
 - Ratings-only mode (`--weeks A-B` / `--all-weeks`, `--no-ingest`, `--dry-run`) is the only way to
   fill history; it is idempotent (0 D1 rows on a rerun; artifacts are re-uploaded).
 - `n_flat_teams` (teams with no losses, rating undetermined once the prior has faded) is logged in

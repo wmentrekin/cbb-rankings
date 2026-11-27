@@ -6,7 +6,7 @@ ported from `cfb-rankings`. A weekly GitHub Actions job ingests games from
 and publishes JSON rankings to R2 for the site.
 
 Status: storage, ingestion, result overrides, backfill, the model, the weekly run and publishing to
-R2 (plan: `docs/cbb-rankings-port/plan.yaml`). Not live until the launch checklist below is done.
+R2. Not live until the launch checklist below is done.
 
 ## Storage
 
