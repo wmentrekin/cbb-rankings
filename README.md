@@ -237,8 +237,14 @@ listing. A full-season ratings backfill is 365 x 19 = 6,935 D1 rows and no API c
 
 1. Add the GitHub secrets: `CBBD_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`,
    `CLOUDFLARE_API_TOKEN`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
-   `R2_BUCKET_NAME`, `PERSONAL_SITE_DEPLOY_HOOK_URL`. No cost.
-2. Backfill games with "Backfill Games" (dry run, then apply; the apply reuses the dry run's
+   `R2_BUCKET_NAME`, `PERSONAL_SITE_DEPLOY_HOOK_URL`. No cost. `CLOUDFLARE_D1_DATABASE_ID` must
+   equal `database_id` in `wrangler.jsonc`: the migrations go to the database named there, the
+   pipeline writes to the one in the secret. The R2 token is bucket-wide (R2 tokens cannot be
+   scoped to a prefix), so football's `rankings/` and `schedule/` keys are protected only by the
+   prefix guard in `artifacts/r2.py`.
+2. Run "Apply D1 Migrations" once (see "Migrations" below; it needs only `CLOUDFLARE_API_TOKEN`
+   and `CLOUDFLARE_ACCOUNT_ID`). Until the tables exist every later step fails on its first write.
+3. Backfill games with "Backfill Games" (dry run, then apply; the apply reuses the dry run's
    responses): season 2026 (2025-26, the prior of the current season) and season 2027 (2026-27).
    Each is 4 API calls and about 19,000 D1 rows written for a full season (the 2027 slice is smaller
    until the schedule fills in); both on one day stay well under the 100,000 per day limit. Optional:
@@ -246,21 +252,21 @@ listing. A full-season ratings backfill is 365 x 19 = 6,935 D1 rows and no API c
    priors. `ingest/seasons.json` already has the 2025 entry (Selection Sunday 2025-03-16, a Sunday,
    checked by a test), so the dry run works as it stands. Without season 2025 stored, weeks 1-9 of
    season 2026 can only be rated with `allow_missing_prior` ticked.
-3. Backfill ratings with "Backfill Ratings": staging first (`destination` staging, dry run, then
+4. Backfill ratings with "Backfill Ratings": staging first (`destination` staging, dry run, then
    apply; then `staging-published` to check the R2 files), then `production`. For the weeks already
    played of 2027 (and `all` for 2026). 0 API calls; D1 rows 365 per week per table (2026: 6,935;
    2027 weeks 1-3: 1,095), staging and production each; R2 about 5 requests per week. Weeks 1-9 of
-   2026 need season 2025 stored (step 2, optional), or `allow_missing_prior` ticked. Deltas need the earlier weeks
+   2026 need season 2025 stored (step 3, optional), or `allow_missing_prior` ticked. Deltas need the earlier weeks
    stored, so backfill every week from 1.
-4. Confirm Selection Sunday 2027 in `ingest/seasons.json` (currently `provisional`; the date decides
+5. Confirm Selection Sunday 2027 in `ingest/seasons.json` (currently `provisional`; the date decides
    `is_rated` and the last published week). After a correction run `ingest.run season 2027`.
-5. Enable the weekly schedule: it is active once `weekly-update.yml` is on the default branch; the
+6. Enable the weekly schedule: it is active once `weekly-update.yml` is on the default branch; the
    first scheduled Monday run costs 4 API calls and the D1 rows above, and it catches up any of the
-   season's earlier weeks that step 3 left without ratings (up to 4; more is a `CATCHUP_FAILURE`).
+   season's earlier weeks that step 4 left without ratings (up to 4; more is a `CATCHUP_FAILURE`).
    Add the next season to `ingest/seasons.json` before September: from November 1 a missing entry
    fails the run. Optionally rehearse one week
    with "Test Week Run" first (4 calls, 365 `ratings_staging` rows plus the ingest writes).
-6. On the site repository, flip the basketball sport from optional to required, then rebuild (the
+7. On the site repository, flip the basketball sport from optional to required, then rebuild (the
    weekly job's deploy hook does it every Monday; "Backfill Ratings" does not call the hook).
 
 ## Model

@@ -112,3 +112,18 @@ def test_without_a_fallback_a_non_optimal_solve_raises(loaded_store, osqp_never_
 
     with pytest.raises(ModelSolveError, match="not 'optimal'"):
         rate_week(loaded_store, SEASON, 3, dataclasses.replace(BASKETBALL_DEFAULT, fallback_solver=None))
+
+
+def test_when_the_fallback_fails_too_the_error_names_both_solvers(loaded_store, monkeypatch):
+    from model.solve import SolverStatusError
+
+    real = cp.Problem.solve
+
+    def fake(self, *a, **k):
+        value = real(self, *a, **k)
+        self._status = cp.OPTIMAL_INACCURATE
+        return value
+
+    monkeypatch.setattr(cp.Problem, "solve", fake)
+    with pytest.raises(SolverStatusError, match=r"OSQP.*fallback CLARABEL also failed: .*CLARABEL"):
+        rate_week(loaded_store, SEASON, 3, BASKETBALL_DEFAULT)

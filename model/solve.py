@@ -321,7 +321,13 @@ def solve(
         fallback = dataclasses.replace(
             config, solver=config.fallback_solver, flat_rating_rule="min_feasible", fallback_solver=None
         )
-        result = _solve_once(*args, fallback)
+        try:
+            result = _solve_once(*args, fallback)
+        except SolverStatusError as fallback_exc:
+            # Name both failures: the fallback's error alone would hide why it was tried.
+            raise SolverStatusError(
+                f"{exc}; fallback {config.fallback_solver} also failed: {fallback_exc}"
+            ) from fallback_exc
         result.warnings.append(
             f"{exc}; solved with fallback {config.fallback_solver} and the least-optimal rule instead"
         )

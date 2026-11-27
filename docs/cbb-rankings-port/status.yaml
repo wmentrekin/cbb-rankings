@@ -13,7 +13,8 @@ objective: >
 
 repository_sync:
   completed_before_work: true
-  checked_at: "2026-11-23"
+  checked_at: "2026-11-27"
+  recheck_2026_11_27: "cbb-rankings origin/main still 46d4f82 and an ancestor of the PR head (comparison_only). cfb-rankings origin/main is 7ca0cb7; its model math is unchanged since 40a6b4f (comment-only edits in model/params.py), so the frozen reference is current. personal-site main 7b2866e is merged into PR #37."
   repositories:
     - path: "/home/user/cbb-rankings"
       remote: "origin (wmentrekin/cbb-rankings)"
@@ -44,8 +45,8 @@ branching:
   branch_name: "claude/sleepy-tesla-rnjsvt"
 
 summary:
-  current_focus: "cbb-rankings PR #3 open for owner review; personal-site PR waits on merging main into the branch"
-  last_completed: "Model aligned with football 40a6b4f (no floor + shift, fade at week 10, target gap 5); 682 tests; PR #3 opened"
+  current_focus: "cbb-rankings PR #3: final verification done, fixes committed locally, waiting on the owner's go-ahead to push; personal-site PR #37 open and held until #3 merges and a backfill runs"
+  last_completed: "2026-11-27 verification of the 40a6b4f alignment and the launch path: approve with minor changes, no blocking findings; 683 tests"
   current_blocker: ""
 
 artifacts:
@@ -59,7 +60,9 @@ pr:
   status: "open"
   other:
     - repo: "wmentrekin/personal-site"
-      status: "pending: merging main (football Playoffs tab) into the refactor before opening"
+      number: 37
+      url: "https://github.com/wmentrekin/personal-site/pull/37"
+      status: "open; main merged in and the Playoffs tab ported; held until PR #3 merges and data is backfilled"
 
 agents:
   - id: "orchestrator"
@@ -273,13 +276,43 @@ agents:
     task: "B2-T2: overrides and backfill"
     last_update: "2026-11-23"
     blocker: ""
+  - id: "reviewer-3"
+    role: "reviewer"
+    task_profile: "review"
+    requested_model_tier: "balanced"
+    requested_reasoning: "medium"
+    requested_provider_model: "sonnet"
+    actual_model: "sonnet (runtime-resolved)"
+    actual_reasoning: "not independently controllable"
+    routing_enforced: true
+    escalation_count: 0
+    status: "done"
+    stage: "verification"
+    task: "review the alignment commits 3776098..HEAD, the workflows and publish path, and the launch checklist; approve with minor changes (README: migrations step, database id note; solve: name both solvers when the fallback fails too)"
+    last_update: "2026-11-27"
+    blocker: ""
+  - id: "tester-1"
+    role: "tester"
+    task_profile: "test_execution"
+    requested_model_tier: "fast"
+    requested_reasoning: "low"
+    requested_provider_model: "haiku"
+    actual_model: "haiku (runtime-resolved)"
+    actual_reasoning: "not independently controllable"
+    routing_enforced: true
+    escalation_count: 0
+    status: "done"
+    stage: "verification"
+    task: "full suite as CI runs it: 682 passed, 0 failed, 0 skipped (Python 3.12); no lint or type tooling is configured"
+    last_update: "2026-11-27"
+    blocker: ""
 
 loops:
   planning_review:
     count: 1
     max: 2
   execution_verification:
-    count: 1
+    count: 2
     max: 2
 
 checkpoint:
@@ -320,6 +353,6 @@ model_routing:
     - "balanced tier resolved to claude-sonnet-5-5 (the map lists Sonnet 5)"
   unresolved_limitations: []
 
-next_action: "Finish the personal-site merge and open its PR; owner: secrets, review, launch approval; then B7"
+next_action: "Owner: approve pushing the verification fixes to PR #3, then merge; then the README launch checklist (secrets, migrations, backfills); then personal-site PR #37"
 next_recommended_command: "$work"
 user_input_needed: true
