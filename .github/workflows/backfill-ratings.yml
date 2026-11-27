@@ -1,0 +1,96 @@
+name: Backfill Ratings
+
+# Ratings-only backfill from the games already stored (run "Backfill Games" first): rates a range
+# of weeks in order with `main.py --no-ingest`, writes the ratings table and publishes the week
+# artifacts. No API calls. DRY RUN BY DEFAULT: the dry run rates, compares with what is stored and
+# prints what would be written and published, writing and publishing nothing.
+#
+# destination: staging            ratings_staging, nothing published (default; rehearse here first)
+#              staging-published  ratings_staging + the cbb-staging/ prefix in R2
+#              production         ratings + the cbb/ prefix in R2 (the site is NOT rebuilt by this
+#                                 workflow; the next Monday run or a manual deploy hook does that)
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: 'Season, the year it ends (2026-27 is 2027)'
+        required: true
+        type: string
+      weeks:
+        description: 'Weeks: "all" (week 1 through the last week that has ended), A-B (3-7) or one week'
+        required: true
+        default: 'all'
+        type: string
+      destination:
+        description: 'Where to write'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - staging-published
+          - production
+      apply:
+        description: 'Write (unchecked = dry run, writes and publishes nothing)'
+        type: boolean
+        default: false
+      allow_missing_prior:
+        description: 'Rate weeks 1-9 even if the prior season is not stored'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-rankings
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Reminder - shared concurrency group
+        run: |
+          echo "::notice title=Shared concurrency group::Do not dispatch this workflow while the Monday 'Weekly Rankings' run is queued or about to start (Mondays 10:00 UTC). All D1-writing workflows share the group weekly-rankings: one run executes and only ONE waits, and a newer waiting run replaces an older waiting one, so this dispatch can silently cancel a queued Monday run. Check the Actions tab first."
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v7
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Backfill ratings
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          SEASON: ${{ inputs.season }}
+          WEEKS: ${{ inputs.weeks }}
+          DESTINATION: ${{ inputs.destination }}
+          APPLY: ${{ inputs.apply }}
+          ALLOW_MISSING_PRIOR: ${{ inputs.allow_missing_prior }}
+        run: |
+          set -o pipefail
+          args=(--season "$SEASON" --no-ingest)
+          if [ "$WEEKS" = "all" ]; then args+=(--all-weeks); else args+=(--weeks "$WEEKS"); fi
+          [ "$DESTINATION" != "production" ] && args+=(--staging)
+          [ "$DESTINATION" = "staging-published" ] && args+=(--publish-staging)
+          [ "$APPLY" != "true" ] && args+=(--dry-run)
+          [ "$ALLOW_MISSING_PRIOR" = "true" ] && args+=(--allow-missing-prior)
+          uv run --frozen python main.py "${args[@]}" 2>&1 | tee output.log
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '### Backfill ratings'
+            echo '```'
+            grep -hE '^(WEEKLY_OK|WEEKLY_DRY_RUN|RANGE_DONE|WEEKLY_FAILURE|OVERRIDE_FAILURE|PRIOR_FAILURE|MODEL_FAILURE|WRITE_FAILURE|PUBLISH_FAILURE)' output.log 2>/dev/null || echo 'no marker line (see the job log)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

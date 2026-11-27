@@ -1,0 +1,86 @@
+name: Backfill Games
+
+# Ingest-only backfill of one season (or one week) into D1; see scripts/backfill_games.py.
+# DRY RUN BY DEFAULT: the dry run still fetches from the CBBD API and spends API calls
+# (a full season is 4, a week 1; the monthly quota is shared with football) but writes nothing.
+# `apply` writes, then re-applies ingest/game_result_overrides.json.
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: 'Season, the year it ends (2025-26 is 2026)'
+        required: true
+        type: string
+      week:
+        description: 'Week number; leave blank for the whole season'
+        required: false
+        type: string
+      apply:
+        description: 'Write to D1 (unchecked = dry run, writes nothing)'
+        type: boolean
+        default: false
+      max_rows_written:
+        description: 'Refuse to apply above this estimated rows-written count (blank = 40000; D1 free plan: 100000 per day)'
+        required: false
+        type: string
+      allow_absent:
+        description: 'Accept up to N stored games missing from a full-season fetch (neutralizes them); blank = default allowance. Only for a verified, legitimate removal'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # Shared with the weekly workflow: a backfill must not race the scheduled run. An in-flight
+  # write finishes rather than being cancelled halfway.
+  group: weekly-rankings
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Reminder - shared concurrency group
+        run: |
+          echo "::notice title=Shared concurrency group::Do not dispatch this workflow while the Monday 'Weekly Rankings' run is queued or about to start (Mondays 10:00 UTC). All D1-writing workflows share the group weekly-rankings: one run executes and only ONE waits, and a newer waiting run replaces an older waiting one, so this dispatch can silently cancel a queued Monday run. Check the Actions tab first."
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v7
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Run backfill
+        env:
+          CBBD_API_KEY: ${{ secrets.CBBD_API_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Inputs reach the shell as environment variables, never interpolated into the script.
+          SEASON: ${{ inputs.season }}
+          WEEK: ${{ inputs.week }}
+          APPLY: ${{ inputs.apply }}
+          MAX_ROWS_WRITTEN: ${{ inputs.max_rows_written }}
+          ALLOW_ABSENT: ${{ inputs.allow_absent }}
+        run: |
+          set -o pipefail
+          args=(--season "$SEASON")
+          [ -n "$WEEK" ] && args+=(--week "$WEEK")
+          [ -n "$MAX_ROWS_WRITTEN" ] && args+=(--max-rows-written "$MAX_ROWS_WRITTEN")
+          [ -n "$ALLOW_ABSENT" ] && args+=(--allow-absent "$ALLOW_ABSENT")
+          [ "$APPLY" = "true" ] && args+=(--apply)
+          # Failures are not masked: the script's exit code (non-zero on a fetch failure, an INGEST_FAILURE, an OVERRIDE_FAILURE
+          # or a refused apply) fails the job. tee keeps the summary in the job log either way.
+          uv run --frozen python scripts/backfill_games.py "${args[@]}" 2>&1 | tee output.log
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '### Backfill'
+            echo '```'
+            grep -E 'BACKFILL_APPLIED|BACKFILL_FAILED|INGEST_FAILURE|OVERRIDE_FAILURE|DRY RUN .*nothing written' output.log || echo 'no summary line (see the job log)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

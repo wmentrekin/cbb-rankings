@@ -1,0 +1,30 @@
+[
+ {
+  "id": 198,
+  "sourceId": "2448",
+  "school": "North Carolina A&T",
+  "abbreviation": "NCAT",
+  "primaryColor": "0505aa",
+  "secondaryColor": "004684",
+  "conferenceId": 12,
+  "conference": "CAA",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/2448.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/2448.png"
+  ]
+ },
+ {
+  "id": 23,
+  "sourceId": "2065",
+  "school": "Bethune-Cookman",
+  "abbreviation": "BCU",
+  "primaryColor": "7b1831",
+  "secondaryColor": "e9aa12",
+  "conferenceId": 25,
+  "conference": "SWAC",
+  "logos": [
+   "https://cdn.collegefootballdata.com/cbb-logos/500/2065.png",
+   "https://cdn.collegefootballdata.com/cbb-logos-dark/500/2065.png"
+  ]
+ }
+]
